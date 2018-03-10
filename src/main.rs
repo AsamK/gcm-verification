@@ -14,7 +14,7 @@ use hyper::header::UserAgent;
 use hyper_tls::HttpsConnector;
 use protos::checkin;
 use protos::mcs;
-use quick_protobuf::{BytesReader, MessageWrite, Writer};
+use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::borrow::Cow;
 use std::default::Default;
 use std::io::{Read, Write};

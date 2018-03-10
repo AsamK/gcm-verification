@@ -11,7 +11,7 @@
 
 use std::io::Write;
 use std::borrow::Cow;
-use quick_protobuf::{MessageWrite, BytesReader, Writer, Result};
+use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
 
@@ -41,15 +41,15 @@ pub struct CheckinRequest<'a> {
     pub userSerialNumber: Option<i32>,
 }
 
-impl<'a> CheckinRequest<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for CheckinRequest<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(10) => msg.imei = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(16) => msg.androidId = Some(r.read_int64(bytes)?),
                 Ok(26) => msg.digest = Some(r.read_string(bytes).map(Cow::Borrowed)?),
-                Ok(34) => msg.checkin = r.read_message(bytes, mod_CheckinRequest::Checkin::from_reader)?,
+                Ok(34) => msg.checkin = r.read_message::<mod_CheckinRequest::Checkin>(bytes)?,
                 Ok(42) => msg.desiredBuild = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(50) => msg.locale = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(56) => msg.loggingId = Some(r.read_int64(bytes)?),
@@ -63,7 +63,7 @@ impl<'a> CheckinRequest<'a> {
                 Ok(122) => msg.otaCert.push(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(130) => msg.serial = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(138) => msg.esn = Some(r.read_string(bytes).map(Cow::Borrowed)?),
-                Ok(146) => msg.deviceConfiguration = Some(r.read_message(bytes, mod_CheckinRequest::DeviceConfig::from_reader)?),
+                Ok(146) => msg.deviceConfiguration = Some(r.read_message::<mod_CheckinRequest::DeviceConfig>(bytes)?),
                 Ok(154) => msg.macAddressType.push(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(160) => msg.fragment = r.read_int32(bytes)?,
                 Ok(170) => msg.userName = Some(r.read_string(bytes).map(Cow::Borrowed)?),
@@ -148,15 +148,15 @@ pub struct Checkin<'a> {
     pub userNumber: Option<i32>,
 }
 
-impl<'a> Checkin<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for Checkin<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
-                Ok(10) => msg.build = r.read_message(bytes, mod_CheckinRequest::mod_Checkin::Build::from_reader)?,
+                Ok(10) => msg.build = r.read_message::<mod_CheckinRequest::mod_Checkin::Build>(bytes)?,
                 Ok(16) => msg.lastCheckinMs = Some(r.read_int64(bytes)?),
-                Ok(26) => msg.event.push(r.read_message(bytes, mod_CheckinRequest::mod_Checkin::Event::from_reader)?),
-                Ok(34) => msg.stat.push(r.read_message(bytes, mod_CheckinRequest::mod_Checkin::Statistic::from_reader)?),
+                Ok(26) => msg.event.push(r.read_message::<mod_CheckinRequest::mod_Checkin::Event>(bytes)?),
+                Ok(34) => msg.stat.push(r.read_message::<mod_CheckinRequest::mod_Checkin::Statistic>(bytes)?),
                 Ok(42) => msg.requestedGroup.push(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(50) => msg.cellOperator = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(58) => msg.simOperator = Some(r.read_string(bytes).map(Cow::Borrowed)?),
@@ -221,8 +221,8 @@ pub struct Build<'a> {
     pub otaInstalled: Option<bool>,
 }
 
-impl<'a> Build<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for Build<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -293,8 +293,8 @@ pub struct Event<'a> {
     pub timeMs: Option<i64>,
 }
 
-impl<'a> Event<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for Event<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -332,8 +332,8 @@ pub struct Statistic<'a> {
     pub sum: Option<f32>,
 }
 
-impl<'a> Statistic<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for Statistic<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -387,8 +387,8 @@ pub struct DeviceConfig<'a> {
     pub maxApkDownloadSizeMb: Option<i32>,
 }
 
-impl<'a> DeviceConfig<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for DeviceConfig<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -479,16 +479,16 @@ pub struct CheckinResponse<'a> {
     pub deviceDataVersionInfo: Option<Cow<'a, str>>,
 }
 
-impl<'a> CheckinResponse<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for CheckinResponse<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(8) => msg.statsOk = Some(r.read_bool(bytes)?),
-                Ok(18) => msg.intent.push(r.read_message(bytes, mod_CheckinResponse::Intent::from_reader)?),
+                Ok(18) => msg.intent.push(r.read_message::<mod_CheckinResponse::Intent>(bytes)?),
                 Ok(24) => msg.timeMs = Some(r.read_int64(bytes)?),
                 Ok(34) => msg.digest = Some(r.read_string(bytes).map(Cow::Borrowed)?),
-                Ok(42) => msg.setting.push(r.read_message(bytes, mod_CheckinResponse::GservicesSetting::from_reader)?),
+                Ok(42) => msg.setting.push(r.read_message::<mod_CheckinResponse::GservicesSetting>(bytes)?),
                 Ok(48) => msg.marketOk = Some(r.read_bool(bytes)?),
                 Ok(57) => msg.androidId = Some(r.read_fixed64(bytes)?),
                 Ok(65) => msg.securityToken = Some(r.read_fixed64(bytes)?),
@@ -552,8 +552,8 @@ pub struct Intent<'a> {
     pub extra: Vec<mod_CheckinResponse::mod_Intent::Extra<'a>>,
 }
 
-impl<'a> Intent<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for Intent<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -561,7 +561,7 @@ impl<'a> Intent<'a> {
                 Ok(18) => msg.dataUri = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(26) => msg.mimeType = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(34) => msg.javaClass = Some(r.read_string(bytes).map(Cow::Borrowed)?),
-                Ok(42) => msg.extra.push(r.read_message(bytes, mod_CheckinResponse::mod_Intent::Extra::from_reader)?),
+                Ok(42) => msg.extra.push(r.read_message::<mod_CheckinResponse::mod_Intent::Extra>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -601,8 +601,8 @@ pub struct Extra<'a> {
     pub value: Option<Cow<'a, str>>,
 }
 
-impl<'a> Extra<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for Extra<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -638,8 +638,8 @@ pub struct GservicesSetting<'a> {
     pub value: Option<Cow<'a, [u8]>>,
 }
 
-impl<'a> GservicesSetting<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for GservicesSetting<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {

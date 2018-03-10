@@ -11,7 +11,7 @@
 
 use std::io::Write;
 use std::borrow::Cow;
-use quick_protobuf::{MessageWrite, BytesReader, Writer, Result};
+use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
 
@@ -22,8 +22,8 @@ pub struct HeartbeatPing {
     pub status: Option<i64>,
 }
 
-impl HeartbeatPing {
-    pub fn from_reader(r: &mut BytesReader, bytes: &[u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for HeartbeatPing {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -61,8 +61,8 @@ pub struct HeartbeatAck {
     pub status: Option<i64>,
 }
 
-impl HeartbeatAck {
-    pub fn from_reader(r: &mut BytesReader, bytes: &[u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for HeartbeatAck {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -101,15 +101,15 @@ pub struct ErrorInfo<'a> {
     pub extension: Option<Extension<'a>>,
 }
 
-impl<'a> ErrorInfo<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for ErrorInfo<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(8) => msg.code = r.read_int32(bytes)?,
                 Ok(18) => msg.message = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(26) => msg.type_pb = Some(r.read_string(bytes).map(Cow::Borrowed)?),
-                Ok(34) => msg.extension = Some(r.read_message(bytes, Extension::from_reader)?),
+                Ok(34) => msg.extension = Some(r.read_message::<Extension>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
@@ -142,8 +142,8 @@ pub struct Setting<'a> {
     pub value: Cow<'a, str>,
 }
 
-impl<'a> Setting<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for Setting<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -178,8 +178,8 @@ pub struct HeartbeatStat<'a> {
     pub interval_ms: i32,
 }
 
-impl<'a> HeartbeatStat<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for HeartbeatStat<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -217,8 +217,8 @@ pub struct HeartbeatConfig<'a> {
     pub interval_ms: Option<i32>,
 }
 
-impl<'a> HeartbeatConfig<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for HeartbeatConfig<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -271,8 +271,8 @@ pub struct LoginRequest<'a> {
     pub status: Option<i64>,
 }
 
-impl<'a> LoginRequest<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for LoginRequest<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -283,12 +283,12 @@ impl<'a> LoginRequest<'a> {
                 Ok(42) => msg.auth_token = r.read_string(bytes).map(Cow::Borrowed)?,
                 Ok(50) => msg.device_id = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(56) => msg.last_rmq_id = Some(r.read_int64(bytes)?),
-                Ok(66) => msg.setting.push(r.read_message(bytes, Setting::from_reader)?),
+                Ok(66) => msg.setting.push(r.read_message::<Setting>(bytes)?),
                 Ok(72) => msg.compress = Some(r.read_int32(bytes)?),
                 Ok(82) => msg.received_persistent_id.push(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(88) => msg.include_stream_ids = Some(r.read_bool(bytes)?),
                 Ok(96) => msg.adaptive_heartbeat = Some(r.read_bool(bytes)?),
-                Ok(106) => msg.heartbeat_stat = Some(r.read_message(bytes, HeartbeatStat::from_reader)?),
+                Ok(106) => msg.heartbeat_stat = Some(r.read_message::<HeartbeatStat>(bytes)?),
                 Ok(112) => msg.use_rmq2 = Some(r.read_bool(bytes)?),
                 Ok(120) => msg.account_id = Some(r.read_int64(bytes)?),
                 Ok(128) => msg.auth_service = Some(r.read_enum(bytes)?),
@@ -385,18 +385,18 @@ pub struct LoginResponse<'a> {
     pub server_timestamp: Option<i64>,
 }
 
-impl<'a> LoginResponse<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for LoginResponse<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
                 Ok(10) => msg.id = r.read_string(bytes).map(Cow::Borrowed)?,
                 Ok(18) => msg.jid = Some(r.read_string(bytes).map(Cow::Borrowed)?),
-                Ok(26) => msg.error = Some(r.read_message(bytes, ErrorInfo::from_reader)?),
-                Ok(34) => msg.setting.push(r.read_message(bytes, Setting::from_reader)?),
+                Ok(26) => msg.error = Some(r.read_message::<ErrorInfo>(bytes)?),
+                Ok(34) => msg.setting.push(r.read_message::<Setting>(bytes)?),
                 Ok(40) => msg.stream_id = Some(r.read_int32(bytes)?),
                 Ok(48) => msg.last_stream_id_received = Some(r.read_int32(bytes)?),
-                Ok(58) => msg.heartbeat_config = Some(r.read_message(bytes, HeartbeatConfig::from_reader)?),
+                Ok(58) => msg.heartbeat_config = Some(r.read_message::<HeartbeatConfig>(bytes)?),
                 Ok(64) => msg.server_timestamp = Some(r.read_int64(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
@@ -438,8 +438,8 @@ pub struct StreamErrorStanza<'a> {
     pub text: Option<Cow<'a, str>>,
 }
 
-impl<'a> StreamErrorStanza<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for StreamErrorStanza<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -470,8 +470,8 @@ impl<'a> MessageWrite for StreamErrorStanza<'a> {
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct Close { }
 
-impl Close {
-    pub fn from_reader(r: &mut BytesReader, _: &[u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for Close {
+    fn from_reader(r: &mut BytesReader, _: &[u8]) -> Result<Self> {
         r.read_to_end();
         Ok(Self::default())
     }
@@ -485,8 +485,8 @@ pub struct Extension<'a> {
     pub data: Cow<'a, [u8]>,
 }
 
-impl<'a> Extension<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for Extension<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -530,8 +530,8 @@ pub struct IqStanza<'a> {
     pub status: Option<i64>,
 }
 
-impl<'a> IqStanza<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for IqStanza<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -540,8 +540,8 @@ impl<'a> IqStanza<'a> {
                 Ok(26) => msg.id = r.read_string(bytes).map(Cow::Borrowed)?,
                 Ok(34) => msg.from = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(42) => msg.to = Some(r.read_string(bytes).map(Cow::Borrowed)?),
-                Ok(50) => msg.error = Some(r.read_message(bytes, ErrorInfo::from_reader)?),
-                Ok(58) => msg.extension = Some(r.read_message(bytes, Extension::from_reader)?),
+                Ok(50) => msg.error = Some(r.read_message::<ErrorInfo>(bytes)?),
+                Ok(58) => msg.extension = Some(r.read_message::<Extension>(bytes)?),
                 Ok(66) => msg.persistent_id = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(72) => msg.stream_id = Some(r.read_int32(bytes)?),
                 Ok(80) => msg.last_stream_id_received = Some(r.read_int32(bytes)?),
@@ -626,8 +626,8 @@ pub struct AppData<'a> {
     pub value: Cow<'a, str>,
 }
 
-impl<'a> AppData<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for AppData<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -681,8 +681,8 @@ pub struct DataMessageStanza<'a> {
     pub delay: Option<i32>,
 }
 
-impl<'a> DataMessageStanza<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for DataMessageStanza<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -692,7 +692,7 @@ impl<'a> DataMessageStanza<'a> {
                 Ok(34) => msg.to = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(42) => msg.category = r.read_string(bytes).map(Cow::Borrowed)?,
                 Ok(50) => msg.token = Some(r.read_string(bytes).map(Cow::Borrowed)?),
-                Ok(58) => msg.app_data.push(r.read_message(bytes, AppData::from_reader)?),
+                Ok(58) => msg.app_data.push(r.read_message::<AppData>(bytes)?),
                 Ok(64) => msg.from_trusted_server = Some(r.read_bool(bytes)?),
                 Ok(74) => msg.persistent_id = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(80) => msg.stream_id = Some(r.read_int32(bytes)?),
@@ -773,8 +773,8 @@ impl<'a> MessageWrite for DataMessageStanza<'a> {
 #[derive(Debug, Default, PartialEq, Clone)]
 pub struct StreamAck { }
 
-impl StreamAck {
-    pub fn from_reader(r: &mut BytesReader, _: &[u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for StreamAck {
+    fn from_reader(r: &mut BytesReader, _: &[u8]) -> Result<Self> {
         r.read_to_end();
         Ok(Self::default())
     }
@@ -787,8 +787,8 @@ pub struct SelectiveAck<'a> {
     pub id: Vec<Cow<'a, str>>,
 }
 
-impl<'a> SelectiveAck<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for SelectiveAck<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -823,8 +823,8 @@ pub struct BindAccountRequest<'a> {
     pub token: Option<Cow<'a, str>>,
 }
 
-impl<'a> BindAccountRequest<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for BindAccountRequest<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -873,8 +873,8 @@ pub struct BindAccountResponse<'a> {
     pub error: Option<ErrorInfo<'a>>,
 }
 
-impl<'a> BindAccountResponse<'a> {
-    pub fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
+impl<'a> MessageRead<'a> for BindAccountResponse<'a> {
+    fn from_reader(r: &mut BytesReader, bytes: &'a [u8]) -> Result<Self> {
         let mut msg = Self::default();
         while !r.is_eof() {
             match r.next_tag(bytes) {
@@ -882,7 +882,7 @@ impl<'a> BindAccountResponse<'a> {
                 Ok(18) => msg.jid = Some(r.read_string(bytes).map(Cow::Borrowed)?),
                 Ok(40) => msg.laststreamid = Some(r.read_int32(bytes)?),
                 Ok(32) => msg.streamid = Some(r.read_int32(bytes)?),
-                Ok(26) => msg.error = Some(r.read_message(bytes, ErrorInfo::from_reader)?),
+                Ok(26) => msg.error = Some(r.read_message::<ErrorInfo>(bytes)?),
                 Ok(t) => { r.read_unknown(bytes, t)?; }
                 Err(e) => return Err(e),
             }
