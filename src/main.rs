@@ -6,7 +6,7 @@ extern crate tokio_core;
 extern crate tokio_io;
 
 use futures::{Future, Stream};
-use hyper::{Method, Request};
+use hyper::{Method, Request, Body};
 use hyper::Client;
 use hyper::client::HttpConnector;
 use hyper::header::{ContentLength, ContentType};
@@ -26,7 +26,7 @@ use tokio_core::reactor::Handle;
 mod protos;
 
 fn main() {
-    println!("Hello, world!");
+    println!("Starting Jodel GCM verification server");
     let mut core = Core::new().unwrap();
     let handle = core.handle();
     //    let client = Client::new(&core.handle());
@@ -94,14 +94,17 @@ impl From<std::io::Error> for Error {
     }
 }
 
-fn request(
-    core: &mut Core,
-    client: Client<HttpsConnector<HttpConnector>>,
-) -> Result<AndroidAccount, Error> {
+fn get_checkin_request_payload<'a>() -> checkin::CheckinRequest<'a>  {
     let mut checkin_request = checkin::CheckinRequest::default();
     checkin_request.checkin.build.sdkVersion = Option::Some(18);
     checkin_request.version = Option::Some(3);
     checkin_request.fragment = 0;
+
+    checkin_request
+}
+
+fn get_checkin_request() -> Result<Request<Body>, Error> {
+    let checkin_request = get_checkin_request_payload();
     let uri = "https://android.clients.google.com/checkin".parse()?;
     //    let uri = "https://google.com".parse()?;
     let mut req = Request::new(Method::Post, uri);
@@ -116,6 +119,13 @@ fn request(
     let mut buf: Vec<u8> = Vec::new();
     checkin_request.write_message(&mut Writer::new(&mut buf))?;
     req.set_body(buf);
+    Ok(req)
+}
+
+fn create_gcm_account_future(
+    client: Client<HttpsConnector<HttpConnector>>,
+) -> Result<impl Future<Item=Result<AndroidAccount, Error>, Error=hyper::Error>, Error> {
+    let req = get_checkin_request()?;
     let work = client
         .request(req)
         .map(|res| -> Result<AndroidAccount, Error> {
@@ -123,9 +133,10 @@ fn request(
             println!("Response: {:?}", res.status());
 
             let total = res.body().concat2().wait().unwrap();
+            let bytes = total.as_ref();
             let resp = checkin::CheckinResponse::from_reader(
-                &mut BytesReader::from_bytes(total.as_ref()),
-                total.as_ref(),
+                &mut BytesReader::from_bytes(bytes),
+                bytes,
             ).unwrap();
             let android_id = match resp.androidId {
                 Some(id) => id as i64,
@@ -145,6 +156,14 @@ fn request(
             //                .map_err(From::from)
             Ok(acc)
         });
+    Ok(work)
+}
+
+fn request(
+    core: &mut Core,
+    client: Client<HttpsConnector<HttpConnector>>,
+) -> Result<AndroidAccount, Error> {
+    let work = create_gcm_account_future(client)?;
     match core.run(work) {
         Ok(work) => {
             println!("Ok: {:?}", work);
@@ -157,12 +176,7 @@ fn request(
     }
 }
 
-fn read(core: &mut Core, handle: &Handle, account: &AndroidAccount) -> Result<&'static str, Error> {
-    let mtalk_uri = &"mtalk.google.com:5228";
-    let server: Vec<_> = mtalk_uri.to_socket_addrs().expect("wrong uri").collect();
-    println!("{:?}", server);
-    let connection = TcpStream::connect(&server[0], &handle);
-
+fn get_login_request(account: &AndroidAccount) -> mcs::LoginRequest  {
     let mut login_request = mcs::LoginRequest::default();
     login_request.auth_service = Option::Some(mcs::mod_LoginRequest::AuthService::ANDROID_ID);
     login_request.auth_token = Cow::from(account.security_token.to_string());
@@ -170,8 +184,19 @@ fn read(core: &mut Core, handle: &Handle, account: &AndroidAccount) -> Result<&'
     login_request.domain = Cow::from("mcs.android.com");
     login_request.device_id = Option::Some(Cow::from(format!("android-{:X}", account.android_id)));
     login_request.resource = Cow::from(account.android_id.to_string());
-    login_request.user = Cow::from(account.android_id.to_string());
+    login_request.user = login_request.resource.clone();
     login_request.account_id = Option::Some(account.android_id);
+
+    login_request
+}
+
+fn read(core: &mut Core, handle: &Handle, account: &AndroidAccount) -> Result<&'static str, Error> {
+    let mtalk_uri = &"mtalk.google.com:5228";
+    let server: Vec<_> = mtalk_uri.to_socket_addrs().expect("wrong uri").collect();
+    println!("{:?}", server);
+    let connection = TcpStream::connect(&server[0], &handle);
+
+    let login_request = get_login_request(account);
 
     let length = login_request.get_size() as u64;
 
