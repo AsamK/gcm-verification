@@ -1,20 +1,22 @@
+extern crate bytes;
 extern crate futures;
+extern crate http;
 extern crate hyper;
 extern crate hyper_tls;
 extern crate quick_protobuf;
 extern crate tokio_core;
 extern crate tokio_io;
 
+use bytes::BufMut;
 use futures::{Future, Stream};
-use hyper::{Body, Method, Request};
-use hyper::Client;
 use hyper::client::HttpConnector;
-use hyper::header::{ContentLength, ContentType};
-use hyper::header::UserAgent;
+use hyper::header::{HeaderValue, CONTENT_LENGTH, CONTENT_TYPE, USER_AGENT};
+use hyper::Client;
+use hyper::{Body, Request};
 use hyper_tls::HttpsConnector;
 use protos::checkin;
 use protos::mcs;
-use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Reader, Writer};
+use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use std::borrow::Cow;
 use std::default::Default;
 use std::fmt::Display;
@@ -28,12 +30,9 @@ mod protos;
 fn main() {
     println!("Starting Jodel GCM verification server");
     let mut core = Core::new().unwrap();
-    let handle = core.handle();
-    //    let client = Client::new(&core.handle());
-    let client = Client::configure()
+    let client = Client::builder()
         .keep_alive(false)
-        .connector(HttpsConnector::new(4, &handle).unwrap())
-        .build(&handle);
+        .build(HttpsConnector::new(4).unwrap());
 
     match request(&mut core, client) {
         Ok(work) => {
@@ -53,15 +52,14 @@ struct AndroidAccount {
 pub enum Error {
     NoId,
     NoToken,
-    Hyper(hyper::Error),
-    Uri(hyper::error::UriError),
+    Hyper(http::Error),
     Addr(std::net::AddrParseError),
     Protobuf(quick_protobuf::errors::Error),
     Io(std::io::Error),
 }
 
 impl Display for Error {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
         Ok(())
     }
 }
@@ -78,14 +76,8 @@ impl From<std::net::AddrParseError> for Error {
     }
 }
 
-impl From<hyper::error::UriError> for Error {
-    fn from(err: hyper::error::UriError) -> Error {
-        Error::Uri(err)
-    }
-}
-
-impl From<hyper::Error> for Error {
-    fn from(err: hyper::Error) -> Error {
+impl From<http::Error> for Error {
+    fn from(err: http::Error) -> Error {
         Error::Hyper(err)
     }
 }
@@ -113,58 +105,62 @@ fn get_checkin_request_payload<'a>() -> checkin::CheckinRequest<'a> {
 
 fn get_checkin_request() -> Result<Request<Body>, Error> {
     let checkin_request = get_checkin_request_payload();
-    let uri = "https://android.clients.google.com/checkin".parse()?;
-    //    let uri = "https://google.com".parse()?;
-    let mut req = Request::new(Method::Post, uri);
-    req.headers_mut()
-        .set(ContentType("application/x-protobuffer".parse().unwrap()));
-    req.headers_mut()
-        .set(ContentLength(checkin_request.get_size() as u64));
-    //    req.headers_mut().set(AcceptEncoding(vec![qitem(Encoding::Gzip)]));
-    req.headers_mut()
-        .set(UserAgent::new("Android-Checkin/2.0 (vbox86p JLS36G); gzip"));
-
+    let uri = "https://android.clients.google.com/checkin";
     let mut buf: Vec<u8> = Vec::new();
-    checkin_request.write_message(&mut Writer::new(&mut buf))?;
-    req.set_body(buf);
+    {
+        let reference = buf.by_ref();
+
+        // Adapt reference to `std::io::Write`.
+        let mut writer = reference.writer();
+        checkin_request.write_message(&mut Writer::new(&mut writer))?;
+    }
+    let req = hyper::Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/x-protobuffer"),
+        ).header(
+            CONTENT_LENGTH,
+            HeaderValue::from(checkin_request.get_size()),
+        ).header(
+            USER_AGENT,
+            HeaderValue::from_static("Android-Checkin/2.0 (vbox86p JLS36G); gzip"),
+        ).body(hyper::Body::from(buf))?;
+
     Ok(req)
 }
 
 fn create_gcm_account_future(
     client: Client<HttpsConnector<HttpConnector>>,
-) -> Result<impl Future<Item=Result<AndroidAccount, Error>, Error=impl std::error::Error>, Error> {
+) -> Result<impl Future<Item = Result<AndroidAccount, Error>, Error = impl std::error::Error>, Error>
+{
     let req = get_checkin_request()?;
     let work = client
         .request(req)
         .map(|res| {
             println!("Response: {:?}", res.status());
 
-            res.body()
-                .concat2()
-//                .fold(Vec::new(), |mut acc, chunk| {
-//                    acc.extend_from_slice(&*chunk);
-//                    futures::future::ok::<_, hyper::Error>(acc)
-//                })
-                .map(|x| {
-                    let bytes = x.as_ref();
-                    let resp = checkin::CheckinResponse::from_reader(
-                        &mut BytesReader::from_bytes(bytes),
-                        bytes,
-                    )?;
-                    let android_id = match resp.androidId {
-                        Some(id) => id as i64,
-                        None => return Err(Error::NoId),
-                    };
-                    let security_token = match resp.securityToken {
-                        Some(token) => token,
-                        None => return Err(Error::NoToken),
-                    };
-                    let acc = AndroidAccount {
-                        android_id,
-                        security_token,
-                    };
-                    Ok(acc)
-                })
+            res.into_body().concat2().map(|x| {
+                let bytes = x.as_ref();
+                let resp = checkin::CheckinResponse::from_reader(
+                    &mut BytesReader::from_bytes(bytes),
+                    bytes,
+                )?;
+                let android_id = match resp.androidId {
+                    Some(id) => id as i64,
+                    None => return Err(Error::NoId),
+                };
+                let security_token = match resp.securityToken {
+                    Some(token) => token,
+                    None => return Err(Error::NoToken),
+                };
+                let acc = AndroidAccount {
+                    android_id,
+                    security_token,
+                };
+                Ok(acc)
+            })
         }).flatten();
     Ok(work)
 }
@@ -180,25 +176,23 @@ fn request(
             match work {
                 Ok(work) => {
                     println!("Account {:?}", work);
-                    read(&handle, &work)
-                        .map_err(|err| -> Box<std::error::Error> { Box::new(err) })
+                    read(&handle, &work).map_err(|err| -> Box<std::error::Error> { Box::new(err) })
                 }
 
                 Err(foo) => panic!("Err: {:?}", foo),
             }
-//            match core.run(client) {
-//                Ok(work) => println!("Okf: {:?}", work),
-//                Err(err) => println!("Err: {:?}", err),
-//            }
-//
-//            Ok("foo")
+            //            match core.run(client) {
+            //                Ok(work) => println!("Okf: {:?}", work),
+            //                Err(err) => println!("Err: {:?}", err),
+            //            }
+            //
+            //            Ok("foo")
         });
-
 
     match core.run(work) {
         Ok(work) => {
             println!("Ok: {:?}", work);
-//            read(&handle, &work.unwrap());
+            //            read(&handle, &work.unwrap());
             Ok(())
         }
         Err(foo) => {
@@ -256,7 +250,7 @@ fn read(handle: &Handle, account: &AndroidAccount) -> impl Future<Item=(), Error
             let buf = Vec::new();
             tokio_io::io::read_to_end(stream, buf)
         })
-        .and_then(|(stream, buf)| {
+        .and_then(|(_stream, buf)| {
             let mut reader = BytesReader::from_bytes(&buf);
 //            let r = mcs::DataMessageStanza::from_reader(&mut reader, &buf).expect("Cannot read FooBar");
 
