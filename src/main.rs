@@ -1,14 +1,18 @@
 #![feature(await_macro, async_await, futures_api)]
+#![feature(try_trait)]
 
 #[macro_use]
 extern crate tokio;
+
+#[macro_use]
+extern crate serde_derive;
 
 use self::protos::checkin;
 use self::protos::mcs;
 use bytes::BufMut;
 use futures::{Future, Stream};
 use hyper::client::HttpConnector;
-use hyper::header::{HeaderValue, CONTENT_LENGTH, CONTENT_TYPE, USER_AGENT};
+use hyper::header::{HeaderValue, CONTENT_LENGTH, AUTHORIZATION, CONTENT_TYPE, USER_AGENT};
 use hyper::Client;
 use hyper::{Body, Request};
 use hyper_tls::HttpsConnector;
@@ -28,9 +32,23 @@ fn main() {
         .keep_alive(false)
         .build(HttpsConnector::new(4).unwrap());
 
-    tokio::run_async(async {
-        await!(request(client));
-    });
+    let args = std::env::args().collect::<Vec<String>>();
+    if args.len() == 1 {
+        tokio::run_async(async move {
+            await!(request(&client));
+        });
+    } else if args.len() == 3 {
+        let account = AndroidAccount {
+            android_id: args.get(1).unwrap().parse().unwrap(),
+            security_token: args.get(2).unwrap().parse().unwrap(),
+        };
+        tokio::run_async(async move {
+            await!(read(&account));
+        });
+    } else {
+        println!("Wrong command line args");
+        std::process::exit(1);
+    };
 }
 
 #[derive(Debug)]
@@ -46,6 +64,9 @@ pub enum Error {
     VarInt,
     Hyper(hyper::Error),
     Http(http::Error),
+    HttpHeader(http::header::InvalidHeaderValue),
+    None(std::option::NoneError),
+    Serde(serde_urlencoded::ser::Error),
     Addr(std::net::AddrParseError),
     Protobuf(quick_protobuf::errors::Error),
     Io(std::io::Error),
@@ -69,6 +90,12 @@ impl From<std::net::AddrParseError> for Error {
     }
 }
 
+impl From<std::option::NoneError> for Error {
+    fn from(err: std::option::NoneError) -> Error {
+        Error::None(err)
+    }
+}
+
 impl From<hyper::Error> for Error {
     fn from(err: hyper::Error) -> Error {
         Error::Hyper(err)
@@ -78,6 +105,18 @@ impl From<hyper::Error> for Error {
 impl From<http::Error> for Error {
     fn from(err: http::Error) -> Error {
         Error::Http(err)
+    }
+}
+
+impl From<serde_urlencoded::ser::Error> for Error {
+    fn from(err: serde_urlencoded::ser::Error) -> Error {
+        Error::Serde(err)
+    }
+}
+
+impl From<http::header::InvalidHeaderValue> for Error {
+    fn from(err: http::header::InvalidHeaderValue) -> Error {
+        Error::HttpHeader(err)
     }
 }
 
@@ -134,7 +173,7 @@ fn get_checkin_request() -> Result<Request<Body>, Error> {
 }
 
 async fn create_gcm_account_future(
-    client: Client<HttpsConnector<HttpConnector>>,
+    client: &Client<HttpsConnector<HttpConnector>>,
 ) -> Result<AndroidAccount, Error> {
     let req = get_checkin_request()?;
     let res = await!(client.request(req))?;
@@ -164,15 +203,67 @@ async fn create_gcm_account_future(
 }
 
 async fn request(
-    client: Client<HttpsConnector<HttpConnector>>,
-) -> Result<(), impl std::error::Error> {
+    client: &Client<HttpsConnector<HttpConnector>>,
+) -> Result<(), Error> {
     println!("Request new android account");
-    let work = await!(create_gcm_account_future(client))?;
+    let work = await!(create_gcm_account_future(&client))?;
     println!("Account {:?}", work);
 
     std::thread::sleep(std::time::Duration::from_secs(5));
 
-    await!(read(&work))
+    await!(get_push_token(&client, work.android_id, work.security_token));
+
+    Ok(())
+}
+
+#[derive(Serialize, Debug)]
+struct PushTokenRequest<'a> {
+    app: &'a str,
+    app_ver: &'a str,
+    cert: &'a str,
+    device: &'a str,
+    sender: &'a str,
+    #[serde(rename="X-appid")]
+    x_appid: &'a str,
+    #[serde(rename="X-scope")]
+    x_scope: &'a str,
+}
+
+async fn get_push_token(client: &Client<HttpsConnector<HttpConnector>>, android_id: i64, security_token: u64) -> Result<(), Error> {
+    let uri = "https://android.clients.google.com/c2dm/register3";
+    let android_id_str = android_id.to_string();
+    let request = PushTokenRequest {
+        app: "com.tellm.android.app",
+        app_ver: "1001800",
+        cert: "a4a8d4d7b09736a0f65596a868cc6fd620920fb0",
+        device: &android_id_str,
+        sender: "425112442765",
+        x_appid: "a5kfH358Kdh", // TODO make this random 11 chars ascii letters and digits
+        x_scope: "GCM",
+    };
+    let body = serde_urlencoded::to_string(&request)?;
+    let req = hyper::Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header(
+            AUTHORIZATION,
+            HeaderValue::from_str(&format!("AidLogin {}:{}", android_id, security_token))?,
+        )
+        .header(
+            CONTENT_TYPE,
+            HeaderValue::from_static("application/x-www-form-urlencoded"),
+        )
+        .body(hyper::Body::from(body))?;
+
+    let res = await!(client.request(req))?;
+    println!("Response: {:?}", res.status());
+    let res_body = String::from_utf8(await!(res.into_body().concat2())?.as_ref().to_vec()).map_err(|_| Error::NoId)?;
+    println!("body: {}", res_body);
+    if res_body.starts_with("token=") {
+        let token = &res_body[6..];
+        println!("token: {}", token);
+    }
+    Ok(())
 }
 
 fn get_login_request<'b>(account: &AndroidAccount) -> mcs::LoginRequest<'b> {
@@ -194,28 +285,28 @@ fn get_login_request<'b>(account: &AndroidAccount) -> mcs::LoginRequest<'b> {
 fn read_varint64(bytes: &[u8]) -> Result<(u64, usize), Error> {
     let mut i: usize = 0;
     // part0
-    let mut b = *bytes.get(i).unwrap();
+    let mut b = *bytes.get(i)?;
     if b & 0x80 == 0 {
         return Ok((b as u64, i + 1));
     }
     let mut r0 = (b & 0x7f) as u32;
 
     i += 1;
-    b = *bytes.get(i).unwrap();
+    b = *bytes.get(i)?;
     r0 |= ((b & 0x7f) as u32) << 7;
     if b & 0x80 == 0 {
         return Ok((r0 as u64, i + 1));
     }
 
     i += 1;
-    b = *bytes.get(i).unwrap();
+    b = *bytes.get(i)?;
     r0 |= ((b & 0x7f) as u32) << 14;
     if b & 0x80 == 0 {
         return Ok((r0 as u64, i + 1));
     }
 
     i += 1;
-    b = *bytes.get(i).unwrap();
+    b = *bytes.get(i)?;
     r0 |= ((b & 0x7f) as u32) << 21;
     if b & 0x80 == 0 {
         return Ok((r0 as u64, i + 1));
@@ -223,28 +314,28 @@ fn read_varint64(bytes: &[u8]) -> Result<(u64, usize), Error> {
 
     // part1
     i += 1;
-    b = *bytes.get(i).unwrap();
+    b = *bytes.get(i)?;
     let mut r1 = (b & 0x7f) as u32;
     if b & 0x80 == 0 {
         return Ok((r0 as u64 | (r1 as u64) << 28, i + 1));
     }
 
     i += 1;
-    b = *bytes.get(i).unwrap();
+    b = *bytes.get(i)?;
     r1 |= ((b & 0x7f) as u32) << 7;
     if b & 0x80 == 0 {
         return Ok((r0 as u64 | (r1 as u64) << 28, i + 1));
     }
 
     i += 1;
-    b = *bytes.get(i).unwrap();
+    b = *bytes.get(i)?;
     r1 |= ((b & 0x7f) as u32) << 14;
     if b & 0x80 == 0 {
         return Ok((r0 as u64 | (r1 as u64) << 28, i + 1));
     }
 
     i += 1;
-    b = *bytes.get(i).unwrap();
+    b = *bytes.get(i)?;
     r1 |= ((b & 0x7f) as u32) << 21;
     if b & 0x80 == 0 {
         return Ok((r0 as u64 | (r1 as u64) << 28, i + 1));
@@ -252,14 +343,14 @@ fn read_varint64(bytes: &[u8]) -> Result<(u64, usize), Error> {
 
     // part2
     i += 1;
-    b = *bytes.get(i).unwrap();
+    b = *bytes.get(i)?;
     let mut r2 = (b & 0x7f) as u32;
     if b & 0x80 == 0 {
         return Ok(((r0 as u64 | (r1 as u64) << 28) | (r2 as u64) << 56, i + 1));
     }
 
     i += 1;
-    b = *bytes.get(i).unwrap();
+    b = *bytes.get(i)?;
     r2 |= (b as u32) << 7;
     if b & 0x80 == 0 {
         return Ok(((r0 as u64 | (r1 as u64) << 28) | (r2 as u64) << 56, i + 1));
@@ -306,58 +397,55 @@ async fn read<'a>(account: &'a AndroidAccount) -> Result<(), Error> {
         login_request.write_message(proto_writer)?;
         println!("written message");
     }
+
     let (stream, _) = await!(tokio_io::io::write_all(stream, &buf))?;
     println!("read");
     let buf = [0u8; 1];
     let (stream, version) = await!(tokio_io::io::read_exact(stream, buf))?;
 
     println!("version {:?}", version);
-    println!("read length");
-    let buf = [0u8; 10];
-    let (stream, length_buf) = await!(tokio_io::io::read_exact(stream, buf))?;
+    let mut stream = stream;
+    loop {
+        println!("reading tag");
 
-    println!("length {:?}", length_buf);
-    let (length, consumed_count) = read_varint64(&length_buf).unwrap();
+        let buf = [0u8; 1];
+        let (streams, [response_tag]) = await!(tokio_io::io::read_exact(stream, buf))?;
+        stream = streams;
 
-    println!("length {:?}, {:?}", length, consumed_count);
-    let buf = vec![0; length as usize];
-    // buf.copy_from_slice(&lengthBuf[..consumedCount]);
-    //let remaining = &mut buf[consumedCount..];
-    let remaining = buf;
-    tokio_io::io::read_exact(stream, remaining);
-    // {
-    //     let reader = &Reader::from_reader(&stream);
-    //     reader.read_varint64()
-    // }
-    //     let client = connection
-    //         // .and_then(|(stream, b)| {
-    //         //     println!("buffer {:?}", b);
-    //         //     let buf = Vec::new();
-    //         //     tokio_io::io::read_to_end(stream, buf)
-    //         // })
-    //         .and_then(|(_stream, buf)| {
-    //             // println!("read {:?}", c);
-    //             // println!("read {:?}", buf.len());
-    //             println!("read {:?}", buf);
-    //             let mut reader = BytesReader::from_bytes(&buf);
-    // //            let r = mcs::DataMessageStanza::from_reader(&mut reader, &buf).expect("Cannot read FooBar");
-    // // reader.read_len_varint(buf, mcs::DataMessageStanza);
+        println!("read tag");
 
-    //             while !reader.is_eof() {
-    //                 println!("verison {:?}", String::from_utf8_lossy(&buf));
-    //                 let foobar: mcs::DataMessageStanza = reader.read_message(&buf).expect("not working");
-    //                 println!("data message {:?}", foobar);
-    //             }
-    //             futures::future::ok(())
-    //         })
-    //        .map_err(|err| -> () { () })
+        let buf = [0u8; 10]; // TODO maybe optimize to to read bigger chunks
+        let (streams, length_buf) = await!(tokio_io::io::read_exact(stream, buf))?;
+        stream = streams;
 
-    //        let mut buf = BytesMut::with_capacity(1000);
-    //        stream
-    //            .read_buf(&mut buf)
-    //            .map(|buf| print!("Buffer {:?}", buf))
-    //            .map_err(|e| eprintln!("Error: {}", e));
-    //    handle.spawn(client)
-    // client
-    Ok(())
+        println!("read length");
+
+        let (length, consumed_count) = read_varint64(&length_buf)?;
+
+        println!("tag {:?} length {:?}, consumed {:?}", response_tag, length, consumed_count);
+        let mut buf = vec![0; length as usize];
+        let len = std::cmp::min(length, 10-consumed_count as u64) as usize;
+        buf[0..len].copy_from_slice(&length_buf[consumed_count..len+consumed_count]);
+        if len < length as usize {
+            let remaining = &mut buf[10-consumed_count..];
+            let (streams, _) = await!(tokio_io::io::read_exact(stream, remaining))?;
+            stream = streams;
+        } else {
+            panic!("The case that message length smaller 10 is no handled yet!");
+        }
+
+        println!("buf {:?}", String::from_utf8_lossy(&buf));
+
+        match response_tag {
+            3 => (), // Login
+            4 => return Result::Err(Error::NoId), // socket closed by server
+            8 => {
+                let mut reader = BytesReader::from_bytes(&buf);
+                let r = mcs::DataMessageStanza::from_reader(&mut reader, &buf)?;
+
+                println!("stanza {:?}", r);
+            },
+            _ => (),
+        }
+    }
 }
