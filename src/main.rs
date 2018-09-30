@@ -3,9 +3,11 @@ extern crate futures;
 extern crate http;
 extern crate hyper;
 extern crate hyper_tls;
+extern crate native_tls;
 extern crate quick_protobuf;
 extern crate tokio_core;
 extern crate tokio_io;
+extern crate tokio_tls;
 
 use bytes::BufMut;
 use futures::{Future, Stream};
@@ -14,9 +16,10 @@ use hyper::header::{HeaderValue, CONTENT_LENGTH, CONTENT_TYPE, USER_AGENT};
 use hyper::Client;
 use hyper::{Body, Request};
 use hyper_tls::HttpsConnector;
+use native_tls::TlsConnector;
 use protos::checkin;
 use protos::mcs;
-use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
+use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Reader, Writer};
 use std::borrow::Cow;
 use std::default::Default;
 use std::fmt::Display;
@@ -52,6 +55,7 @@ struct AndroidAccount {
 pub enum Error {
     NoId,
     NoToken,
+    VarInt,
     Hyper(http::Error),
     Addr(std::net::AddrParseError),
     Protobuf(quick_protobuf::errors::Error),
@@ -176,6 +180,7 @@ fn request(
             match work {
                 Ok(work) => {
                     println!("Account {:?}", work);
+                    std::thread::sleep(std::time::Duration::from_secs(5));
                     read(&handle, &work).map_err(|err| -> Box<std::error::Error> { Box::new(err) })
                 }
 
@@ -217,23 +222,113 @@ fn get_login_request<'b>(account: &AndroidAccount) -> mcs::LoginRequest<'b> {
     login_request
 }
 
-fn read(handle: &Handle, account: &AndroidAccount) -> impl Future<Item=(), Error=impl std::error::Error> {
-    let mtalk_uri = &"mtalk.google.com:5228";
+/// Reads the next varint encoded u64
+fn read_varint64(bytes: &[u8]) -> Result<(u64, usize), Error> {
+    let mut i: usize = 0;
+    // part0
+    let mut b = *bytes.get(i).unwrap();
+    if b & 0x80 == 0 {
+        return Ok((b as u64, i + 1));
+    }
+    let mut r0 = (b & 0x7f) as u32;
+
+    i += 1;
+    b = *bytes.get(i).unwrap();
+    r0 |= ((b & 0x7f) as u32) << 7;
+    if b & 0x80 == 0 {
+        return Ok((r0 as u64, i + 1));
+    }
+
+    i += 1;
+    b = *bytes.get(i).unwrap();
+    r0 |= ((b & 0x7f) as u32) << 14;
+    if b & 0x80 == 0 {
+        return Ok((r0 as u64, i + 1));
+    }
+
+    i += 1;
+    b = *bytes.get(i).unwrap();
+    r0 |= ((b & 0x7f) as u32) << 21;
+    if b & 0x80 == 0 {
+        return Ok((r0 as u64, i + 1));
+    }
+
+    // part1
+    i += 1;
+    b = *bytes.get(i).unwrap();
+    let mut r1 = (b & 0x7f) as u32;
+    if b & 0x80 == 0 {
+        return Ok((r0 as u64 | (r1 as u64) << 28, i + 1));
+    }
+
+    i += 1;
+    b = *bytes.get(i).unwrap();
+    r1 |= ((b & 0x7f) as u32) << 7;
+    if b & 0x80 == 0 {
+        return Ok((r0 as u64 | (r1 as u64) << 28, i + 1));
+    }
+
+    i += 1;
+    b = *bytes.get(i).unwrap();
+    r1 |= ((b & 0x7f) as u32) << 14;
+    if b & 0x80 == 0 {
+        return Ok((r0 as u64 | (r1 as u64) << 28, i + 1));
+    }
+
+    i += 1;
+    b = *bytes.get(i).unwrap();
+    r1 |= ((b & 0x7f) as u32) << 21;
+    if b & 0x80 == 0 {
+        return Ok((r0 as u64 | (r1 as u64) << 28, i + 1));
+    }
+
+    // part2
+    i += 1;
+    b = *bytes.get(i).unwrap();
+    let mut r2 = (b & 0x7f) as u32;
+    if b & 0x80 == 0 {
+        return Ok(((r0 as u64 | (r1 as u64) << 28) | (r2 as u64) << 56, i + 1));
+    }
+
+    i += 1;
+    b = *bytes.get(i).unwrap();
+    r2 |= (b as u32) << 7;
+    if b & 0x80 == 0 {
+        return Ok(((r0 as u64 | (r1 as u64) << 28) | (r2 as u64) << 56, i + 1));
+    }
+
+    // cannot read more than 10 bytes
+    Err(Error::VarInt)
+}
+
+fn read(
+    handle: &Handle,
+    account: &AndroidAccount,
+) -> impl Future<Item = (), Error = impl std::error::Error> {
+    let mtalk_host = "mtalk.google.com";
+    let mtalk_uri = String::from(mtalk_host) + ":5228";
     let server: Vec<_> = mtalk_uri.to_socket_addrs().expect("wrong uri").collect();
     println!("{:?}", server);
     let connection = TcpStream::connect(&server[0], &handle);
+    let cx = TlsConnector::builder().build().unwrap();
+    let cx = tokio_tls::TlsConnector::from(cx);
 
     let login_request = get_login_request(account);
 
     let length = login_request.get_size() as u64;
 
     let client = connection
+        .and_then(move |socket| {
+            cx.connect(mtalk_host, socket)
+                .map_err(|e| {
+                    std::io::Error::new(std::io::ErrorKind::Other, e)
+                })
+        })
         .and_then(move |stream| {
             println!("connected");
             tokio_io::io::write_all(stream, &[41, 2])
         })
         .and_then(move |(mut stream, _)| {
-//            stream.write_all(&[41, 2]);
             println!("written number");
             {
                 let writer = &mut Writer::new(&mut stream);
@@ -245,14 +340,38 @@ fn read(handle: &Handle, account: &AndroidAccount) -> impl Future<Item=(), Error
             let buf = [0u8; 1];
             tokio_io::io::read_exact(stream, buf)
         })
-        .and_then(|(stream, tag)| {
-            println!("verison {:?}", tag);
+        .and_then(move |(stream, version)| {
+            println!("version {:?}", version);
+            println!("read length");
+            let buf = [0u8; 10];
+            tokio_io::io::read_exact(stream, buf)
+        })
+        .and_then(|(stream, lengthBuf)| {
+            println!("length {:?}", lengthBuf);
+            let (length, consumedCount) = read_varint64(&lengthBuf).unwrap();
+            println!("length {:?}, {:?}", length, consumedCount);
+            let mut buf = vec![0; length as usize];
+            // buf.copy_from_slice(&lengthBuf[..consumedCount]);
+            //let remaining = &mut buf[consumedCount..];
+            let remaining = buf;
+            tokio_io::io::read_exact(stream, remaining)
+            // {
+            //     let reader = &Reader::from_reader(&stream);
+            //     reader.read_varint64()
+            // }
+        })
+        .and_then(|(stream, b)| {
+            println!("buffer {:?}", b);
             let buf = Vec::new();
             tokio_io::io::read_to_end(stream, buf)
         })
         .and_then(|(_stream, buf)| {
+            // println!("read {:?}", c);
+            // println!("read {:?}", buf.len());
+            println!("read {:?}", buf);
             let mut reader = BytesReader::from_bytes(&buf);
 //            let r = mcs::DataMessageStanza::from_reader(&mut reader, &buf).expect("Cannot read FooBar");
+// reader.read_len_varint(buf, mcs::DataMessageStanza);
 
             while !reader.is_eof() {
                 println!("verison {:?}", String::from_utf8_lossy(&buf));
@@ -269,6 +388,6 @@ fn read(handle: &Handle, account: &AndroidAccount) -> impl Future<Item=(), Error
     //            .map(|buf| print!("Buffer {:?}", buf))
     //            .map_err(|e| eprintln!("Error: {}", e));
     ;
-//    handle.spawn(client)
+    //    handle.spawn(client)
     client
 }
