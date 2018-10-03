@@ -12,9 +12,9 @@ use hyper_tls::HttpsConnector;
 
 use self::lib::*;
 
+mod errors;
 mod lib;
 mod protos;
-mod errors;
 
 fn main() {
     println!("Starting Jodel GCM verification server");
