@@ -25,7 +25,9 @@ fn main() {
     let args = std::env::args().collect::<Vec<String>>();
     if args.len() == 1 {
         tokio::run_async(async move {
-            await!(request(&client));
+            let response = await!(request(&client)).unwrap();
+            let response = serde_json::to_string(&response).unwrap();
+            println!("{}", response);
         });
     } else if args.len() == 3 {
         let account = AndroidAccount {
@@ -33,7 +35,9 @@ fn main() {
             security_token: args.get(2).unwrap().parse().unwrap(),
         };
         tokio::run_async(async move {
-            await!(read(&account));
+            let code = await!(read(&account)).unwrap();
+            let response = serde_json::to_string(&code).unwrap();
+            println!("{}", response);
         });
     } else {
         println!("Wrong command line args");

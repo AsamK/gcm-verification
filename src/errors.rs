@@ -2,6 +2,7 @@ use std::fmt::Display;
 
 #[derive(Debug)]
 pub enum Error {
+    Msg(&'static str),
     NoId,
     NoToken,
     VarInt,
@@ -10,6 +11,7 @@ pub enum Error {
     HttpHeader(http::header::InvalidHeaderValue),
     None(std::option::NoneError),
     Serde(serde_urlencoded::ser::Error),
+    SerdeJ(serde_json::Error),
     Addr(std::net::AddrParseError),
     Protobuf(quick_protobuf::errors::Error),
     Io(std::io::Error),
@@ -17,7 +19,12 @@ pub enum Error {
 
 impl Display for Error {
     fn fmt(&self, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        Ok(())
+        match self {
+            Error::Msg(msg) => write!(_f, "{}", msg),
+            Error::NoId => write!(_f, "Response contains no android id"),
+            Error::NoToken => write!(_f, "Response contains no token"),
+            _ => Ok(()),
+        }
     }
 }
 
@@ -54,6 +61,12 @@ impl From<http::Error> for Error {
 impl From<serde_urlencoded::ser::Error> for Error {
     fn from(err: serde_urlencoded::ser::Error) -> Error {
         Error::Serde(err)
+    }
+}
+
+impl From<serde_json::Error> for Error {
+    fn from(err: serde_json::Error) -> Error {
+        Error::SerdeJ(err)
     }
 }
 
