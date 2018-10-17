@@ -4,19 +4,23 @@
 #[macro_use]
 extern crate tokio;
 
-#[macro_use]
 extern crate serde_derive;
+
+#[macro_use]
+extern crate tower_web;
 
 use hyper::Client;
 use hyper_tls::HttpsConnector;
 
 use self::lib::*;
 
+mod api;
 mod errors;
 mod lib;
 mod protos;
 
 fn main() {
+    self::api::run();
     println!("Starting Jodel GCM verification server");
     let client = Client::builder()
         .keep_alive(false)

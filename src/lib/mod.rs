@@ -16,7 +16,7 @@ use tokio::net::TcpStream;
 
 use crate::errors::*;
 
-#[derive(Debug)]
+#[derive(Deserialize, Debug)]
 pub struct AndroidAccount {
     pub android_id: i64,
     pub security_token: u64,
@@ -95,15 +95,15 @@ async fn create_gcm_account_future(
     )
 }
 
-#[derive(Serialize, Debug)]
-pub struct AndroidAccountResponse {
+#[derive(Extract, Deserialize, Serialize, Debug)]
+pub struct AndroidAccountSerDe {
     pub android_id: String,
     pub security_token: String,
 }
 
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Response, Debug)]
 pub struct RequestResponse {
-    android_account: AndroidAccountResponse,
+    android_account: AndroidAccountSerDe,
     gcm_token: String,
 }
 
@@ -112,6 +112,7 @@ pub async fn request(
 ) -> Result<RequestResponse, Error> {
     let android_account = await!(create_gcm_account_future(&client))?;
 
+    // TODO instead of waiting, retry until it works
     await!(tokio_timer::sleep(std::time::Duration::from_secs(5)));
 
     let token = await!(get_push_token(
@@ -121,7 +122,7 @@ pub async fn request(
     ))?;
 
     Ok(RequestResponse {
-        android_account: AndroidAccountResponse {
+        android_account: AndroidAccountSerDe {
             android_id: android_account.android_id.to_string(),
             security_token: android_account.security_token.to_string(),
         },
@@ -278,7 +279,7 @@ fn read_varint64(bytes: &[u8]) -> Result<(u64, usize), Error> {
     Err(Error::VarInt)
 }
 
-#[derive(Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Response, Debug)]
 pub struct VerificationResponse {
     server_time: u64,
     #[serde(rename = "type")]
