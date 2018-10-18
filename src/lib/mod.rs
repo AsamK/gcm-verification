@@ -9,6 +9,8 @@ use hyper::{Body, Request};
 use hyper_tls::HttpsConnector;
 use native_tls::TlsConnector;
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
+use rand::distributions::Alphanumeric;
+use rand::Rng;
 use std::borrow::Cow;
 use std::default::Default;
 use std::net::ToSocketAddrs;
@@ -112,14 +114,18 @@ pub async fn request(
 ) -> Result<RequestResponse, Error> {
     let android_account = await!(create_gcm_account_future(&client))?;
 
-    // TODO instead of waiting, retry until it works
-    await!(tokio_timer::sleep(std::time::Duration::from_secs(5)));
-
-    let token = await!(get_push_token(
-        &client,
-        android_account.android_id,
-        android_account.security_token
-    ))?;
+    let token;
+    loop {
+        if let Ok(t) = await!(get_push_token(
+            &client,
+            android_account.android_id,
+            android_account.security_token
+        )) {
+            token = t;
+            break;
+        }
+        await!(tokio_timer::sleep(std::time::Duration::from_millis(5)));
+    }
 
     Ok(RequestResponse {
         android_account: AndroidAccountSerDe {
@@ -128,6 +134,13 @@ pub async fn request(
         },
         gcm_token: token,
     })
+}
+
+fn get_random_appid() -> String {
+    rand::thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(11)
+        .collect()
 }
 
 #[derive(Serialize, Debug)]
@@ -150,13 +163,14 @@ async fn get_push_token(
 ) -> Result<String, Error> {
     let uri = "https://android.clients.google.com/c2dm/register3";
     let android_id_str = android_id.to_string();
+    let app_id_str = get_random_appid();
     let request = PushTokenRequest {
         app: "com.tellm.android.app",
         app_ver: "1001800",
         cert: "a4a8d4d7b09736a0f65596a868cc6fd620920fb0",
         device: &android_id_str,
         sender: "425112442765",
-        x_appid: "a5kfH358Kdh", // TODO make this random 11 chars ascii letters and digits
+        x_appid: &app_id_str,
         x_scope: "GCM",
     };
     let body = serde_urlencoded::to_string(&request)?;

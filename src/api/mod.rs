@@ -11,6 +11,11 @@ use tower_web::ServiceBuilder;
 #[derive(Clone, Debug)]
 struct GcmVerificationResource;
 
+#[derive(Response)]
+struct VerificationApiResponse {
+    verification: VerificationResponse,
+}
+
 impl_web! {
     impl GcmVerificationResource {
         #[get("/account")]
@@ -25,13 +30,15 @@ impl_web! {
 
         #[post("/verification")]
         #[content_type("application/json")]
-        async fn get_verification(&self, body: AndroidAccountSerDe) -> VerificationResponse {
+        async fn get_verification(&self, body: AndroidAccountSerDe) -> VerificationApiResponse {
             let account = AndroidAccount {
                 android_id: body.android_id.parse().unwrap(),
                 security_token: body.security_token.parse().unwrap(),
             };
             let code = await!(read(&account)).unwrap();
-            code
+            VerificationApiResponse {
+                verification: code,
+            }
         }
     }
 }
