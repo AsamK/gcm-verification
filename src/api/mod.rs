@@ -1,7 +1,8 @@
 use crate::lib::*;
-
 use http::{header, Method};
+use hyper::Body;
 use hyper::Client;
+use hyper::client::connect::HttpConnector;
 use hyper_tls::HttpsConnector;
 use tokio::await;
 use tokio::prelude::*;
@@ -9,7 +10,9 @@ use tower_web::middleware::cors::{AllowedOrigins, CorsBuilder};
 use tower_web::ServiceBuilder;
 
 #[derive(Clone, Debug)]
-struct GcmVerificationResource;
+struct GcmVerificationResource {
+    client: Client<HttpsConnector<HttpConnector>, Body>,
+}
 
 #[derive(Response)]
 struct VerificationApiResponse {
@@ -21,10 +24,7 @@ impl_web! {
         #[get("/account")]
         #[content_type("application/json")]
         async fn create_account(&self) -> RequestResponse {
-            let client = Client::builder()
-                .keep_alive(false)
-                .build(HttpsConnector::new(4).unwrap());
-            let response = await!(request(&client)).unwrap();
+            let response = await!(request(&self.client)).unwrap();
             response
         }
 
@@ -55,8 +55,12 @@ pub fn run() {
         .prefer_wildcard(true)
         .build();
 
+    let client = Client::builder()
+        .keep_alive(false)
+        .build(HttpsConnector::new(4).unwrap());
+
     ServiceBuilder::new()
-        .resource(GcmVerificationResource)
+        .resource(GcmVerificationResource { client })
         .middleware(cors)
         .run(&addr)
         .unwrap();
