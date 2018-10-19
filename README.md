@@ -4,10 +4,10 @@ This application provides two HTTP endpoints to create an Android account and to
 The server is written in Rust and needs nightly for async/await support.
 
 Endpoints:
-- GET http://127.0.0.1:8080/account
+- GET http://127.0.0.1:8080/account <br>
   response: `{"android_account":{"android_id":"XXX","security_token":"XXX"},"gcm_token":"XXX"}`
-- POST http://127.0.0.1:8080/verification
-  body: `{"android_id":"XXX","security_token":"XXX"}`
+- POST http://127.0.0.1:8080/verification <br>
+  body: `{"android_id":"XXX","security_token":"XXX"}` <br>
   response: `{"verification":{"server_time":0,"type":"silent_verification","verification_code":"XXX"}}`
 
 Run server locally:
