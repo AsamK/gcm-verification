@@ -377,10 +377,10 @@ pub async fn read<'a>(account: &'a AndroidAccount) -> Result<VerificationRespons
                     app_data.insert(data.key, data.value);
                 }
                 let app_data = app_data;
-                if let (Some(message_type_id), Some(payload)) =
-                    (app_data.get("message_type_id"), app_data.get("payload"))
+                if let (Some(type_name), Some(payload)) =
+                    (app_data.get("type"), app_data.get("payload"))
                 {
-                    if message_type_id == "16" {
+                    if type_name == "silent_verification" {
                         return Ok(serde_json::from_str(payload)?);
                     }
                 };
