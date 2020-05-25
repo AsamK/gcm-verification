@@ -5,20 +5,16 @@ authors = ["Sebastian <asamk@gmx.de>"]
 edition = "2018"
 
 [dependencies]
-bytes = "0.4"
-futures = "0.1"
-http = "0.1"
-hyper = "0.12"
-hyper-tls = "0.3"
+bytes = "0.5"
+futures = "0.3"
+http = "0.2"
+hyper = "0.13"
+hyper-tls = "0.4"
 native-tls = "0.2"
-tokio-io = "0.1"
-tokio-tls = "0.2"
-tokio-timer = "0.2"
-quick-protobuf = "0.6.0"
-rand = "0.6"
-serde = "1.0"
-serde_derive = "1.0"
+tokio-tls = "0.3"
+quick-protobuf = "0.7"
+rand = "0.7"
+serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde_urlencoded = "0.5"
-tokio = { version = "0.1", features = ["async-await-preview"] }
-tower-web = { version = "0.3", features = ["async-await-preview"] }
+serde_urlencoded = "0.6"
+tokio = { version = "0.2", features = [] }

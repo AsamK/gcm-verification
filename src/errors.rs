@@ -9,7 +9,6 @@ pub enum Error {
     Hyper(hyper::Error),
     Http(http::Error),
     HttpHeader(http::header::InvalidHeaderValue),
-    None(std::option::NoneError),
     Serde(serde_urlencoded::ser::Error),
     SerdeJ(serde_json::Error),
     Addr(std::net::AddrParseError),
@@ -37,12 +36,6 @@ impl std::error::Error for Error {
 impl From<std::net::AddrParseError> for Error {
     fn from(err: std::net::AddrParseError) -> Error {
         Error::Addr(err)
-    }
-}
-
-impl From<std::option::NoneError> for Error {
-    fn from(err: std::option::NoneError) -> Error {
-        Error::None(err)
     }
 }
 

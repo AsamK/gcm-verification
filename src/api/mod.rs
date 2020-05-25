@@ -1,11 +1,9 @@
 use crate::lib::*;
 use http::{header, Method};
+use hyper::client::connect::HttpConnector;
 use hyper::Body;
 use hyper::Client;
-use hyper::client::connect::HttpConnector;
 use hyper_tls::HttpsConnector;
-use tokio::await;
-use tokio::prelude::*;
 use tower_web::middleware::cors::{AllowedOrigins, CorsBuilder};
 use tower_web::ServiceBuilder;
 
@@ -24,7 +22,7 @@ impl_web! {
         #[get("/account")]
         #[content_type("application/json")]
         async fn create_account(&self) -> RequestResponse {
-            let response = await!(request(&self.client)).unwrap();
+            let response = request(&self.client).await.unwrap();
             response
         }
 
@@ -35,7 +33,7 @@ impl_web! {
                 android_id: body.android_id.parse().unwrap(),
                 security_token: body.security_token.parse().unwrap(),
             };
-            let code = await!(read(&account)).unwrap();
+            let code = read(&account).await.unwrap();
             VerificationApiResponse {
                 verification: code,
             }

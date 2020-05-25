@@ -1,17 +1,16 @@
-//! Automatically generated rust module for 'mcs.proto' file
+// Automatically generated rust module for 'mcs.proto' file
 
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(unused_imports)]
 #![allow(unknown_lints)]
-#![allow(clippy)]
+#![allow(clippy::all)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
 
-use std::io::Write;
 use std::borrow::Cow;
-use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, Result};
+use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
 
@@ -46,7 +45,7 @@ impl MessageWrite for HeartbeatPing {
         + self.status.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.stream_id { w.write_with_tag(8, |w| w.write_int32(*s))?; }
         if let Some(ref s) = self.last_stream_id_received { w.write_with_tag(16, |w| w.write_int32(*s))?; }
         if let Some(ref s) = self.status { w.write_with_tag(24, |w| w.write_int64(*s))?; }
@@ -85,7 +84,7 @@ impl MessageWrite for HeartbeatAck {
         + self.status.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.stream_id { w.write_with_tag(8, |w| w.write_int32(*s))?; }
         if let Some(ref s) = self.last_stream_id_received { w.write_with_tag(16, |w| w.write_int32(*s))?; }
         if let Some(ref s) = self.status { w.write_with_tag(24, |w| w.write_int64(*s))?; }
@@ -127,7 +126,7 @@ impl<'a> MessageWrite for ErrorInfo<'a> {
         + self.extension.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         w.write_with_tag(8, |w| w.write_int32(*&self.code))?;
         if let Some(ref s) = self.message { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.type_pb { w.write_with_tag(26, |w| w.write_string(&**s))?; }
@@ -164,7 +163,7 @@ impl<'a> MessageWrite for Setting<'a> {
         + 1 + sizeof_len((&self.value).len())
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         w.write_with_tag(10, |w| w.write_string(&**&self.name))?;
         w.write_with_tag(18, |w| w.write_string(&**&self.value))?;
         Ok(())
@@ -202,7 +201,7 @@ impl<'a> MessageWrite for HeartbeatStat<'a> {
         + 1 + sizeof_varint(*(&self.interval_ms) as u64)
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         w.write_with_tag(10, |w| w.write_string(&**&self.ip))?;
         w.write_with_tag(16, |w| w.write_bool(*&self.timeout))?;
         w.write_with_tag(24, |w| w.write_int32(*&self.interval_ms))?;
@@ -241,7 +240,7 @@ impl<'a> MessageWrite for HeartbeatConfig<'a> {
         + self.interval_ms.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.upload_stat { w.write_with_tag(8, |w| w.write_bool(*s))?; }
         if let Some(ref s) = self.ip { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.interval_ms { w.write_with_tag(24, |w| w.write_int32(*s))?; }
@@ -325,7 +324,7 @@ impl<'a> MessageWrite for LoginRequest<'a> {
         + self.status.as_ref().map_or(0, |m| 2 + sizeof_varint(*(m) as u64))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         w.write_with_tag(10, |w| w.write_string(&**&self.id))?;
         w.write_with_tag(18, |w| w.write_string(&**&self.domain))?;
         w.write_with_tag(26, |w| w.write_string(&**&self.user))?;
@@ -366,6 +365,15 @@ impl From<i32> for AuthService {
     fn from(i: i32) -> Self {
         match i {
             2 => AuthService::ANDROID_ID,
+            _ => Self::default(),
+        }
+    }
+}
+
+impl<'a> From<&'a str> for AuthService {
+    fn from(s: &'a str) -> Self {
+        match s {
+            "ANDROID_ID" => AuthService::ANDROID_ID,
             _ => Self::default(),
         }
     }
@@ -419,7 +427,7 @@ impl<'a> MessageWrite for LoginResponse<'a> {
         + self.server_timestamp.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         w.write_with_tag(10, |w| w.write_string(&**&self.id))?;
         if let Some(ref s) = self.jid { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.error { w.write_with_tag(26, |w| w.write_message(s))?; }
@@ -460,7 +468,7 @@ impl<'a> MessageWrite for StreamErrorStanza<'a> {
         + self.text.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         w.write_with_tag(10, |w| w.write_string(&**&self.type_pb))?;
         if let Some(ref s) = self.text { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         Ok(())
@@ -507,7 +515,7 @@ impl<'a> MessageWrite for Extension<'a> {
         + 1 + sizeof_len((&self.data).len())
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         w.write_with_tag(8, |w| w.write_int32(*&self.id))?;
         w.write_with_tag(18, |w| w.write_bytes(&**&self.data))?;
         Ok(())
@@ -572,7 +580,7 @@ impl<'a> MessageWrite for IqStanza<'a> {
         + self.status.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.rmq_id { w.write_with_tag(8, |w| w.write_int64(*s))?; }
         w.write_with_tag(16, |w| w.write_enum(*&self.type_pb as i32))?;
         w.write_with_tag(26, |w| w.write_string(&**&self.id))?;
@@ -618,6 +626,18 @@ impl From<i32> for IqType {
     }
 }
 
+impl<'a> From<&'a str> for IqType {
+    fn from(s: &'a str) -> Self {
+        match s {
+            "GET" => IqType::GET,
+            "SET" => IqType::SET,
+            "RESULT" => IqType::RESULT,
+            "IQ_ERROR" => IqType::IQ_ERROR,
+            _ => Self::default(),
+        }
+    }
+}
+
 }
 
 #[derive(Debug, Default, PartialEq, Clone)]
@@ -648,7 +668,7 @@ impl<'a> MessageWrite for AppData<'a> {
         + 1 + sizeof_len((&self.value).len())
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         w.write_with_tag(10, |w| w.write_string(&**&self.key))?;
         w.write_with_tag(18, |w| w.write_string(&**&self.value))?;
         Ok(())
@@ -743,7 +763,7 @@ impl<'a> MessageWrite for DataMessageStanza<'a> {
         + self.delay.as_ref().map_or(0, |m| 2 + sizeof_varint(*(m) as u64))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.rmq_id { w.write_with_tag(8, |w| w.write_int64(*s))?; }
         if let Some(ref s) = self.id { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         w.write_with_tag(26, |w| w.write_string(&**&self.from))?;
@@ -807,7 +827,7 @@ impl<'a> MessageWrite for SelectiveAck<'a> {
         + self.id.iter().map(|s| 1 + sizeof_len((s).len())).sum::<usize>()
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         for s in &self.id { w.write_with_tag(10, |w| w.write_string(&**s))?; }
         Ok(())
     }
@@ -853,7 +873,7 @@ impl<'a> MessageWrite for BindAccountRequest<'a> {
         + self.token.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.packetid { w.write_with_tag(10, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.domain { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.user { w.write_with_tag(26, |w| w.write_string(&**s))?; }
@@ -901,7 +921,7 @@ impl<'a> MessageWrite for BindAccountResponse<'a> {
         + self.error.as_ref().map_or(0, |m| 1 + sizeof_len((m).get_size()))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.packetid { w.write_with_tag(10, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.jid { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.laststreamid { w.write_with_tag(40, |w| w.write_int32(*s))?; }

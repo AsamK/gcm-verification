@@ -1,7 +1,7 @@
-use bytes::BufMut;
 use crate::protos::checkin;
 use crate::protos::mcs;
-use futures::{Future, Stream};
+use bytes::buf::ext::BufMutExt;
+use futures::TryStreamExt;
 use hyper::client::HttpConnector;
 use hyper::header::{HeaderValue, AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, USER_AGENT};
 use hyper::Client;
@@ -11,9 +11,11 @@ use native_tls::TlsConnector;
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use rand::distributions::Alphanumeric;
 use rand::Rng;
+use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::default::Default;
 use std::net::ToSocketAddrs;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use crate::errors::*;
@@ -68,33 +70,30 @@ async fn create_gcm_account_future(
     client: &Client<HttpsConnector<HttpConnector>>,
 ) -> Result<AndroidAccount, Error> {
     let req = get_checkin_request()?;
-    let res = await!(client.request(req))?;
+    let res = client.request(req).await?;
 
-    await!(
-        res.into_body()
-            .concat2()
-            .map(|x| {
-                let bytes = x.as_ref();
-                let resp = checkin::CheckinResponse::from_reader(
-                    &mut BytesReader::from_bytes(bytes),
-                    bytes,
-                )?;
-                let android_id = match resp.androidId {
-                    Some(id) => id as i64,
-                    None => return Err(Error::NoId),
-                };
-                let security_token = match resp.securityToken {
-                    Some(token) => token,
-                    None => return Err(Error::NoToken),
-                };
-                let acc = AndroidAccount {
-                    android_id,
-                    security_token,
-                };
-                Ok(acc)
-            })
-            .flatten()
-    )
+    let body = res
+        .into_body()
+        .try_fold(Vec::new(), |mut data, chunk| async move {
+            data.extend_from_slice(&chunk);
+            Ok(data)
+        })
+        .await?;
+
+    let resp = checkin::CheckinResponse::from_reader(&mut BytesReader::from_bytes(&body), &body)?;
+    let android_id = match resp.androidId {
+        Some(id) => id as i64,
+        None => return Err(Error::NoId),
+    };
+    let security_token = match resp.securityToken {
+        Some(token) => token,
+        None => return Err(Error::NoToken),
+    };
+    let acc = AndroidAccount {
+        android_id,
+        security_token,
+    };
+    Ok(acc)
 }
 
 #[derive(Extract, Deserialize, Serialize, Debug)]
@@ -112,19 +111,21 @@ pub struct RequestResponse {
 pub async fn request(
     client: &Client<HttpsConnector<HttpConnector>>,
 ) -> Result<RequestResponse, Error> {
-    let android_account = await!(create_gcm_account_future(&client))?;
+    let android_account = create_gcm_account_future(&client).await?;
 
     let token;
     loop {
-        if let Ok(t) = await!(get_push_token(
+        if let Ok(t) = get_push_token(
             &client,
             android_account.android_id,
-            android_account.security_token
-        )) {
+            android_account.security_token,
+        )
+        .await
+        {
             token = t;
             break;
         }
-        await!(tokio_timer::sleep(std::time::Duration::from_millis(5)));
+        tokio::time::delay_for(std::time::Duration::from_millis(5)).await;
     }
 
     Ok(RequestResponse {
@@ -187,10 +188,17 @@ async fn get_push_token(
         )
         .body(hyper::Body::from(body))?;
 
-    let res = await!(client.request(req))?;
+    let res = client.request(req).await?;
 
-    let res_body = String::from_utf8(await!(res.into_body().concat2())?.as_ref().to_vec())
-        .map_err(|_| Error::Msg("Failed to read body"))?;
+    let body = res
+        .into_body()
+        .try_fold(Vec::new(), |mut data, chunk| async move {
+            data.extend_from_slice(&chunk);
+            Ok(data)
+        })
+        .await?;
+
+    let res_body = String::from_utf8(body).map_err(|_| Error::Msg("Failed to read body"))?;
 
     if !res_body.starts_with("token=") {
         return Err(Error::Msg("Failed to receive token"));
@@ -218,28 +226,28 @@ fn get_login_request<'b>(account: &AndroidAccount) -> mcs::LoginRequest<'b> {
 fn read_varint64(bytes: &[u8]) -> Result<(u64, usize), Error> {
     let mut i: usize = 0;
     // part0
-    let mut b = *bytes.get(i)?;
+    let mut b = *bytes.get(i).ok_or(Error::VarInt)?;
     if b & 0x80 == 0 {
         return Ok((b as u64, i + 1));
     }
     let mut r0 = (b & 0x7f) as u32;
 
     i += 1;
-    b = *bytes.get(i)?;
+    b = *bytes.get(i).ok_or(Error::VarInt)?;
     r0 |= ((b & 0x7f) as u32) << 7;
     if b & 0x80 == 0 {
         return Ok((r0 as u64, i + 1));
     }
 
     i += 1;
-    b = *bytes.get(i)?;
+    b = *bytes.get(i).ok_or(Error::VarInt)?;
     r0 |= ((b & 0x7f) as u32) << 14;
     if b & 0x80 == 0 {
         return Ok((r0 as u64, i + 1));
     }
 
     i += 1;
-    b = *bytes.get(i)?;
+    b = *bytes.get(i).ok_or(Error::VarInt)?;
     r0 |= ((b & 0x7f) as u32) << 21;
     if b & 0x80 == 0 {
         return Ok((r0 as u64, i + 1));
@@ -247,28 +255,28 @@ fn read_varint64(bytes: &[u8]) -> Result<(u64, usize), Error> {
 
     // part1
     i += 1;
-    b = *bytes.get(i)?;
+    b = *bytes.get(i).ok_or(Error::VarInt)?;
     let mut r1 = (b & 0x7f) as u32;
     if b & 0x80 == 0 {
         return Ok((r0 as u64 | (r1 as u64) << 28, i + 1));
     }
 
     i += 1;
-    b = *bytes.get(i)?;
+    b = *bytes.get(i).ok_or(Error::VarInt)?;
     r1 |= ((b & 0x7f) as u32) << 7;
     if b & 0x80 == 0 {
         return Ok((r0 as u64 | (r1 as u64) << 28, i + 1));
     }
 
     i += 1;
-    b = *bytes.get(i)?;
+    b = *bytes.get(i).ok_or(Error::VarInt)?;
     r1 |= ((b & 0x7f) as u32) << 14;
     if b & 0x80 == 0 {
         return Ok((r0 as u64 | (r1 as u64) << 28, i + 1));
     }
 
     i += 1;
-    b = *bytes.get(i)?;
+    b = *bytes.get(i).ok_or(Error::VarInt)?;
     r1 |= ((b & 0x7f) as u32) << 21;
     if b & 0x80 == 0 {
         return Ok((r0 as u64 | (r1 as u64) << 28, i + 1));
@@ -276,14 +284,14 @@ fn read_varint64(bytes: &[u8]) -> Result<(u64, usize), Error> {
 
     // part2
     i += 1;
-    b = *bytes.get(i)?;
+    b = *bytes.get(i).ok_or(Error::VarInt)?;
     let mut r2 = (b & 0x7f) as u32;
     if b & 0x80 == 0 {
         return Ok(((r0 as u64 | (r1 as u64) << 28) | (r2 as u64) << 56, i + 1));
     }
 
     i += 1;
-    b = *bytes.get(i)?;
+    b = *bytes.get(i).ok_or(Error::VarInt)?;
     r2 |= (b as u32) << 7;
     if b & 0x80 == 0 {
         return Ok(((r0 as u64 | (r1 as u64) << 28) | (r2 as u64) << 56, i + 1));
@@ -306,7 +314,7 @@ pub async fn read<'a>(account: &'a AndroidAccount) -> Result<VerificationRespons
     let mtalk_uri = String::from(mtalk_host) + ":5228";
     let server: Vec<_> = mtalk_uri.to_socket_addrs().expect("wrong uri").collect();
 
-    let socket = await!(TcpStream::connect(&server[0]))?;
+    let socket = TcpStream::connect(&server[0]).await?;
     let cx = TlsConnector::builder().build().unwrap();
     let cx = tokio_tls::TlsConnector::from(cx);
 
@@ -314,12 +322,12 @@ pub async fn read<'a>(account: &'a AndroidAccount) -> Result<VerificationRespons
 
     let length = login_request.get_size() as u64;
 
-    let stream = await!(
-        cx.connect(mtalk_host, socket)
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))
-    )?;
+    let mut stream = cx
+        .connect(mtalk_host, socket)
+        .await
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
-    let (stream, _) = await!(tokio_io::io::write_all(stream, &[41, 2]))?;
+    stream.write_all(&[41, 2]).await?;
 
     let mut buf: Vec<u8> = Vec::new();
     {
@@ -335,29 +343,28 @@ pub async fn read<'a>(account: &'a AndroidAccount) -> Result<VerificationRespons
         login_request.write_message(proto_writer)?;
     }
 
-    let (stream, _) = await!(tokio_io::io::write_all(stream, &buf))?;
-    let buf = [0u8; 1];
-    let (stream, _version) = await!(tokio_io::io::read_exact(stream, buf))?;
+    stream.write_all(&buf).await?;
+    let mut version_buf = [0u8; 1];
+    stream.read_exact(&mut version_buf).await?;
 
     let mut stream = stream;
     loop {
-        let buf = [0u8; 1];
-        let (streams, [response_tag]) = await!(tokio_io::io::read_exact(stream, buf))?;
-        stream = streams;
+        let mut buf = [0u8; 1];
+        stream.read_exact(&mut buf).await?;
+        let [response_tag] = buf;
 
-        let buf = [0u8; 10]; // TODO maybe optimize to to read bigger chunks
-        let (streams, length_buf) = await!(tokio_io::io::read_exact(stream, buf))?;
-        stream = streams;
+        let mut length_buf = [0u8; 10]; // TODO maybe optimize to to read bigger chunks
+        stream.read_exact(&mut length_buf).await?;
 
         let (length, consumed_count) = read_varint64(&length_buf)?;
+        let length = length as usize;
 
-        let mut buf = vec![0; length as usize];
-        let len = std::cmp::min(length, 10 - consumed_count as u64) as usize;
+        let mut buf = vec![0; length];
+        let len = std::cmp::min(length, 10 - consumed_count);
         buf[0..len].copy_from_slice(&length_buf[consumed_count..len + consumed_count]);
-        if len < length as usize {
-            let remaining = &mut buf[10 - consumed_count..];
-            let (streams, _) = await!(tokio_io::io::read_exact(stream, remaining))?;
-            stream = streams;
+        if len < length {
+            let mut remaining = &mut buf[10 - consumed_count..];
+            stream.read_exact(&mut remaining).await?;
         } else {
             panic!("The case that message length smaller 10 is no handled yet!");
         }

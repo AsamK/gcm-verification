@@ -1,17 +1,16 @@
-//! Automatically generated rust module for 'checkin.proto' file
+// Automatically generated rust module for 'checkin.proto' file
 
 #![allow(non_snake_case)]
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(unused_imports)]
 #![allow(unknown_lints)]
-#![allow(clippy)]
+#![allow(clippy::all)]
 #![cfg_attr(rustfmt, rustfmt_skip)]
 
 
-use std::io::Write;
 use std::borrow::Cow;
-use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, Result};
+use quick_protobuf::{MessageRead, MessageWrite, BytesReader, Writer, WriterBackend, Result};
 use quick_protobuf::sizeofs::*;
 use super::*;
 
@@ -103,7 +102,7 @@ impl<'a> MessageWrite for CheckinRequest<'a> {
         + self.userSerialNumber.as_ref().map_or(0, |m| 2 + sizeof_varint(*(m) as u64))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.imei { w.write_with_tag(10, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.androidId { w.write_with_tag(16, |w| w.write_int64(*s))?; }
         if let Some(ref s) = self.digest { w.write_with_tag(26, |w| w.write_string(&**s))?; }
@@ -184,7 +183,7 @@ impl<'a> MessageWrite for Checkin<'a> {
         + self.userNumber.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         w.write_with_tag(10, |w| w.write_message(&self.build))?;
         if let Some(ref s) = self.lastCheckinMs { w.write_with_tag(16, |w| w.write_int64(*s))?; }
         for s in &self.event { w.write_with_tag(26, |w| w.write_message(s))?; }
@@ -267,7 +266,7 @@ impl<'a> MessageWrite for Build<'a> {
         + self.otaInstalled.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.fingerprint { w.write_with_tag(10, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.hardware { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.brand { w.write_with_tag(26, |w| w.write_string(&**s))?; }
@@ -317,7 +316,7 @@ impl<'a> MessageWrite for Event<'a> {
         + self.timeMs.as_ref().map_or(0, |m| 1 + sizeof_varint(*(m) as u64))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.tag { w.write_with_tag(10, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.value { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.timeMs { w.write_with_tag(24, |w| w.write_int64(*s))?; }
@@ -356,7 +355,7 @@ impl<'a> MessageWrite for Statistic<'a> {
         + self.sum.as_ref().map_or(0, |_| 1 + 4)
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         w.write_with_tag(10, |w| w.write_string(&**&self.tag))?;
         if let Some(ref s) = self.count { w.write_with_tag(16, |w| w.write_int32(*s))?; }
         if let Some(ref s) = self.sum { w.write_with_tag(29, |w| w.write_float(*s))?; }
@@ -439,7 +438,7 @@ impl<'a> MessageWrite for DeviceConfig<'a> {
         + self.maxApkDownloadSizeMb.as_ref().map_or(0, |m| 2 + sizeof_varint(*(m) as u64))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.touchScreen { w.write_with_tag(8, |w| w.write_int32(*s))?; }
         if let Some(ref s) = self.keyboardType { w.write_with_tag(16, |w| w.write_int32(*s))?; }
         if let Some(ref s) = self.navigation { w.write_with_tag(24, |w| w.write_int32(*s))?; }
@@ -521,7 +520,7 @@ impl<'a> MessageWrite for CheckinResponse<'a> {
         + self.deviceDataVersionInfo.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.statsOk { w.write_with_tag(8, |w| w.write_bool(*s))?; }
         for s in &self.intent { w.write_with_tag(18, |w| w.write_message(s))?; }
         if let Some(ref s) = self.timeMs { w.write_with_tag(24, |w| w.write_int64(*s))?; }
@@ -580,7 +579,7 @@ impl<'a> MessageWrite for Intent<'a> {
         + self.extra.iter().map(|s| 1 + sizeof_len((s).get_size())).sum::<usize>()
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.action { w.write_with_tag(10, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.dataUri { w.write_with_tag(18, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.mimeType { w.write_with_tag(26, |w| w.write_string(&**s))?; }
@@ -623,7 +622,7 @@ impl<'a> MessageWrite for Extra<'a> {
         + self.value.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.name { w.write_with_tag(50, |w| w.write_string(&**s))?; }
         if let Some(ref s) = self.value { w.write_with_tag(58, |w| w.write_string(&**s))?; }
         Ok(())
@@ -660,7 +659,7 @@ impl<'a> MessageWrite for GservicesSetting<'a> {
         + self.value.as_ref().map_or(0, |m| 1 + sizeof_len((m).len()))
     }
 
-    fn write_message<W: Write>(&self, w: &mut Writer<W>) -> Result<()> {
+    fn write_message<W: WriterBackend>(&self, w: &mut Writer<W>) -> Result<()> {
         if let Some(ref s) = self.name { w.write_with_tag(10, |w| w.write_bytes(&**s))?; }
         if let Some(ref s) = self.value { w.write_with_tag(18, |w| w.write_bytes(&**s))?; }
         Ok(())
