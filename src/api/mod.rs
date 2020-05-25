@@ -5,6 +5,11 @@ use hyper_tls::HttpsConnector;
 use serde::Serialize;
 use warp::Filter;
 
+pub fn build<E: Into<Box<dyn std::error::Error>>>(err: E) -> warp::Rejection {
+    println!("Error {:?}", err.into());
+    warp::reject::reject()
+}
+
 #[derive(Serialize)]
 struct VerificationApiResponse {
     verification: VerificationResponse,
@@ -13,16 +18,16 @@ struct VerificationApiResponse {
 async fn create_account(
     client: Client<HttpsConnector<HttpConnector>>,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let response = request(&client).await.unwrap();
+    let response = request(&client).await.map_err(build)?;
     Ok(warp::reply::json(&response))
 }
 
 async fn get_verification(body: AndroidAccountSerDe) -> Result<impl warp::Reply, warp::Rejection> {
     let account = AndroidAccount {
-        android_id: body.android_id.parse().unwrap(),
-        security_token: body.security_token.parse().unwrap(),
+        android_id: body.android_id.parse().map_err(build)?,
+        security_token: body.security_token.parse().map_err(build)?,
     };
-    let code = read(&account).await.unwrap();
+    let code = read(&account).await.map_err(build)?;
     Ok(warp::reply::json(&VerificationApiResponse {
         verification: code,
     }))
