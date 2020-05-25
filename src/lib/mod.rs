@@ -96,13 +96,13 @@ async fn create_gcm_account_future(
     Ok(acc)
 }
 
-#[derive(Extract, Deserialize, Serialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct AndroidAccountSerDe {
     pub android_id: String,
     pub security_token: String,
 }
 
-#[derive(Serialize, Response, Debug)]
+#[derive(Serialize, Debug)]
 pub struct RequestResponse {
     android_account: AndroidAccountSerDe,
     gcm_token: String,
@@ -301,7 +301,7 @@ fn read_varint64(bytes: &[u8]) -> Result<(u64, usize), Error> {
     Err(Error::VarInt)
 }
 
-#[derive(Deserialize, Serialize, Response, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct VerificationResponse {
     server_time: u64,
     #[serde(rename = "type")]

@@ -1,65 +1,57 @@
 use crate::lib::*;
-use http::{header, Method};
 use hyper::client::connect::HttpConnector;
-use hyper::Body;
 use hyper::Client;
 use hyper_tls::HttpsConnector;
-use tower_web::middleware::cors::{AllowedOrigins, CorsBuilder};
-use tower_web::ServiceBuilder;
+use serde::Serialize;
+use warp::Filter;
 
-#[derive(Clone, Debug)]
-struct GcmVerificationResource {
-    client: Client<HttpsConnector<HttpConnector>, Body>,
-}
-
-#[derive(Response)]
+#[derive(Serialize)]
 struct VerificationApiResponse {
     verification: VerificationResponse,
 }
 
-impl_web! {
-    impl GcmVerificationResource {
-        #[get("/account")]
-        #[content_type("application/json")]
-        async fn create_account(&self) -> RequestResponse {
-            let response = request(&self.client).await.unwrap();
-            response
-        }
-
-        #[post("/verification")]
-        #[content_type("application/json")]
-        async fn get_verification(&self, body: AndroidAccountSerDe) -> VerificationApiResponse {
-            let account = AndroidAccount {
-                android_id: body.android_id.parse().unwrap(),
-                security_token: body.security_token.parse().unwrap(),
-            };
-            let code = read(&account).await.unwrap();
-            VerificationApiResponse {
-                verification: code,
-            }
-        }
-    }
+async fn create_account(
+    client: Client<HttpsConnector<HttpConnector>>,
+) -> Result<impl warp::Reply, warp::Rejection> {
+    let response = request(&client).await.unwrap();
+    Ok(warp::reply::json(&response))
 }
 
-pub fn run() {
-    let addr = "127.0.0.1:8080".parse().expect("Invalid address");
+async fn get_verification(body: AndroidAccountSerDe) -> Result<impl warp::Reply, warp::Rejection> {
+    let account = AndroidAccount {
+        android_id: body.android_id.parse().unwrap(),
+        security_token: body.security_token.parse().unwrap(),
+    };
+    let code = read(&account).await.unwrap();
+    Ok(warp::reply::json(&VerificationApiResponse {
+        verification: code,
+    }))
+}
+
+pub async fn run() {
+    let addr: std::net::SocketAddr = "127.0.0.1:8080".parse().expect("Invalid address");
     println!("Listening on http://{}", addr);
 
-    let cors = CorsBuilder::new()
-        .allow_origins(AllowedOrigins::Any { allow_null: true })
-        .allow_headers(vec![header::CONTENT_TYPE])
-        .allow_methods(vec![Method::GET, Method::POST])
-        .allow_credentials(false)
-        .prefer_wildcard(true)
+    let cors = warp::cors()
+        .allow_any_origin()
+        .allow_header("content-type")
+        .allow_method("POST")
+        .allow_method("GET")
         .build();
 
-    let client = Client::builder()
-        .keep_alive(false)
-        .build(HttpsConnector::new(4).unwrap());
+    let client = Client::builder().build(HttpsConnector::new());
 
-    ServiceBuilder::new()
-        .resource(GcmVerificationResource { client })
-        .middleware(cors)
-        .run(&addr)
-        .unwrap();
+    let account_route = warp::path!("account")
+        .and(warp::get())
+        .and(warp::any().map(move || client.clone()))
+        .and_then(create_account);
+
+    let verification_route = warp::path!("verification")
+        .and(warp::post())
+        .and(warp::body::json())
+        .and_then(get_verification);
+
+    let server = warp::serve(account_route.or(verification_route).with(cors));
+
+    server.run(addr).await;
 }
