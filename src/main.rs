@@ -9,6 +9,8 @@ mod lib;
 mod protos;
 
 fn main() {
+    env_logger::init();
+
     tokio::runtime::Builder::new()
         .threaded_scheduler()
         .enable_all()

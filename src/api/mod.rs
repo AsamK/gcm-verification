@@ -39,6 +39,8 @@ pub async fn run() {
         .allow_method("GET")
         .build();
 
+    let logging = warp::log("gcm_verification");
+
     let client = Client::builder().build(HttpsConnector::new());
 
     let account_route = warp::path!("account")
@@ -51,7 +53,12 @@ pub async fn run() {
         .and(warp::body::json())
         .and_then(get_verification);
 
-    let server = warp::serve(account_route.or(verification_route).with(cors));
+    let server = warp::serve(
+        account_route
+            .or(verification_route)
+            .with(cors)
+            .with(logging),
+    );
 
     server.run(addr).await;
 }
