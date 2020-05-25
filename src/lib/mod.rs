@@ -309,7 +309,7 @@ pub struct VerificationResponse {
     verification_code: String,
 }
 
-pub async fn read<'a>(account: &'a AndroidAccount) -> Result<VerificationResponse, Error> {
+pub async fn read(account: &AndroidAccount) -> Result<VerificationResponse, Error> {
     let mtalk_host = "mtalk.google.com";
     let mtalk_uri = String::from(mtalk_host) + ":5228";
     let server: Vec<_> = mtalk_uri.to_socket_addrs().expect("wrong uri").collect();
