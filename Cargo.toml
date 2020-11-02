@@ -5,18 +5,18 @@ authors = ["Sebastian <asamk@gmx.de>"]
 edition = "2018"
 
 [dependencies]
-bytes = "0.5"
-env_logger = "0.7"
+bytes = "0.6"
+env_logger = "0.8"
 futures = "0.3"
 http = "0.2"
 hyper = "0.13"
 hyper-tls = "0.4"
 native-tls = "0.2"
 tokio-tls = "0.3"
-quick-protobuf = "0.7"
+quick-protobuf = "0.8"
 rand = "0.7"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-serde_urlencoded = "0.6"
+serde_urlencoded = "0.7"
 tokio = { version = "0.2", features = ["macros", "rt-threaded"] }
 warp = "0.2"

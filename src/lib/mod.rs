@@ -1,6 +1,6 @@
 use crate::protos::checkin;
 use crate::protos::mcs;
-use bytes::buf::ext::BufMutExt;
+use bytes::buf::BufMut;
 use futures::TryStreamExt;
 use hyper::client::HttpConnector;
 use hyper::header::{HeaderValue, AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, USER_AGENT};
