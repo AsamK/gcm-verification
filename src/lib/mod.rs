@@ -141,6 +141,7 @@ fn get_random_appid() -> String {
     rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(11)
+        .map(char::from)
         .collect()
 }
 
