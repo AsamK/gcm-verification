@@ -1,7 +1,6 @@
 use crate::protos::checkin;
 use crate::protos::mcs;
 use bytes::buf::BufMut;
-use futures::TryStreamExt;
 use hyper::client::HttpConnector;
 use hyper::header::{HeaderValue, AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, USER_AGENT};
 use hyper::Client;
@@ -18,7 +17,9 @@ use std::net::ToSocketAddrs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-use crate::errors::*;
+use crate::errors::Error;
+
+pub mod mailauth;
 
 #[derive(Deserialize, Debug)]
 pub struct AndroidAccount {
@@ -61,7 +62,7 @@ fn get_checkin_request() -> Result<Request<Body>, Error> {
             USER_AGENT,
             HeaderValue::from_static("Android-Checkin/2.0 (vbox86p JLS36G); gzip"),
         )
-        .body(hyper::Body::from(buf))?;
+        .body(buf.into())?;
 
     Ok(req)
 }
@@ -72,13 +73,7 @@ async fn create_gcm_account_future(
     let req = get_checkin_request()?;
     let res = client.request(req).await?;
 
-    let body = res
-        .into_body()
-        .try_fold(Vec::new(), |mut data, chunk| async move {
-            data.extend_from_slice(&chunk);
-            Ok(data)
-        })
-        .await?;
+    let body = hyper::body::to_bytes(res.into_body()).await?;
 
     let resp = checkin::CheckinResponse::from_reader(&mut BytesReader::from_bytes(&body), &body)?;
     let android_id = match resp.androidId {
@@ -191,15 +186,9 @@ async fn get_push_token(
 
     let res = client.request(req).await?;
 
-    let body = res
-        .into_body()
-        .try_fold(Vec::new(), |mut data, chunk| async move {
-            data.extend_from_slice(&chunk);
-            Ok(data)
-        })
-        .await?;
+    let body = hyper::body::to_bytes(res.into_body()).await?;
 
-    let res_body = String::from_utf8(body).map_err(|_| Error::Msg("Failed to read body"))?;
+    let res_body = String::from_utf8(body.into()).map_err(|_| Error::Msg("Failed to read body"))?;
 
     if !res_body.starts_with("token=") {
         return Err(Error::Msg("Failed to receive token"));

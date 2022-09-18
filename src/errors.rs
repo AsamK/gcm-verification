@@ -9,19 +9,21 @@ pub enum Error {
     Hyper(hyper::Error),
     Http(http::Error),
     HttpHeader(http::header::InvalidHeaderValue),
-    Serde(serde_urlencoded::ser::Error),
+    SerdeUrl(serde_urlencoded::ser::Error),
+    SerdeDe(serde::de::value::Error),
     SerdeJ(serde_json::Error),
     Addr(std::net::AddrParseError),
     Protobuf(quick_protobuf::errors::Error),
     Io(std::io::Error),
+    InvalidUri(http::uri::InvalidUri),
 }
 
 impl Display for Error {
-    fn fmt(&self, _f: &mut std::fmt::Formatter) -> std::fmt::Result {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
         match self {
-            Error::Msg(msg) => write!(_f, "{}", msg),
-            Error::NoId => write!(_f, "Response contains no android id"),
-            Error::NoToken => write!(_f, "Response contains no token"),
+            Error::Msg(msg) => write!(f, "{}", msg),
+            Error::NoId => write!(f, "Response contains no android id"),
+            Error::NoToken => write!(f, "Response contains no token"),
             _ => Ok(()),
         }
     }
@@ -53,7 +55,13 @@ impl From<http::Error> for Error {
 
 impl From<serde_urlencoded::ser::Error> for Error {
     fn from(err: serde_urlencoded::ser::Error) -> Error {
-        Error::Serde(err)
+        Error::SerdeUrl(err)
+    }
+}
+
+impl From<serde::de::value::Error> for Error {
+    fn from(err: serde::de::value::Error) -> Error {
+        Error::SerdeDe(err)
     }
 }
 
@@ -78,5 +86,11 @@ impl From<quick_protobuf::errors::Error> for Error {
 impl From<std::io::Error> for Error {
     fn from(err: std::io::Error) -> Error {
         Error::Io(err)
+    }
+}
+
+impl From<http::uri::InvalidUri> for Error {
+    fn from(err: http::uri::InvalidUri) -> Error {
+        Error::InvalidUri(err)
     }
 }

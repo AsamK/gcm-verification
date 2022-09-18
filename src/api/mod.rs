@@ -1,4 +1,5 @@
 use crate::errors::Error;
+use crate::lib::mailauth::{generate_firebase_token, request_email_verification};
 use crate::lib::*;
 use axum::extract::State;
 use axum::response::IntoResponse;
@@ -9,7 +10,7 @@ use http::{Method, StatusCode};
 use hyper::client::connect::HttpConnector;
 use hyper::Client;
 use hyper_tls::HttpsConnector;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tower_http::cors::{Any, CorsLayer};
 
@@ -52,6 +53,42 @@ async fn get_verification(
     Ok(Json(VerificationApiResponse { verification: code }))
 }
 
+#[derive(Deserialize, Debug)]
+struct EmailRequest {
+    email: String,
+}
+
+async fn get_request_email_verification(
+    State(client): State<Client<HttpsConnector<HttpConnector>>>,
+    Json(EmailRequest { email }): Json<EmailRequest>,
+) -> Result<impl IntoResponse, Error> {
+    request_email_verification(&client, &email).await?;
+    Ok(())
+}
+
+#[derive(Deserialize, Debug)]
+struct TokenRequest {
+    email: String,
+    link: String,
+}
+
+#[derive(Serialize)]
+pub struct TokenResponse {
+    pub access_token: String,
+    pub user_id: String,
+}
+
+async fn get_firebase_token(
+    State(client): State<Client<HttpsConnector<HttpConnector>>>,
+    Json(TokenRequest { email, link }): Json<TokenRequest>,
+) -> Result<impl IntoResponse, Error> {
+    let res = generate_firebase_token(&client, &email, &link).await?;
+    Ok(Json(TokenResponse {
+        access_token: res.access_token,
+        user_id: res.user_id,
+    }))
+}
+
 pub async fn run() -> Result<(), anyhow::Error> {
     let addr: std::net::SocketAddr = "127.0.0.1:8080".parse().expect("Invalid address");
     println!("Listening on http://{}", addr);
@@ -66,6 +103,8 @@ pub async fn run() -> Result<(), anyhow::Error> {
     let app = Router::with_state(client)
         .route("/account", get(create_account))
         .route("/verification", post(get_verification))
+        .route("/email/request", post(get_request_email_verification))
+        .route("/email/confirm", post(get_firebase_token))
         .layer(cors);
 
     Ok(Server::bind(&addr).serve(app.into_make_service()).await?)

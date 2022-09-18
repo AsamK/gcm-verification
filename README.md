@@ -10,6 +10,12 @@ Endpoints:
   body: `{"android_id":"XXX","security_token":"XXX"}` <br>
   response: `{"verification":{"server_time":0,"type":"silent_verification","verification_code":"XXX"}}`
 
+- POST http://127.0.0.1:8080/email/request <br>
+  body: `{"email":"XXX@XXX"}`
+- POST http://127.0.0.1:8080/email/confirm <br>
+  body: `{"email":"XXX@XXX","link":"XXX"}` <br>
+  response: `{"access_token":"XXX","user_id":"XXX"}`
+
 Run server locally:
 
     cargo run

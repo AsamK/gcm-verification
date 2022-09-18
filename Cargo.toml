@@ -2,7 +2,7 @@
 name = "gcm_verification"
 version = "0.1.0"
 authors = ["Sebastian <asamk@gmx.de>"]
-edition = "2018"
+edition = "2021"
 
 [dependencies]
 bytes = "1"
