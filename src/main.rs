@@ -8,18 +8,18 @@ mod errors;
 mod lib;
 mod protos;
 
-fn main() {
+fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
 
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap()
-        .block_on(run());
+        .block_on(run())
 }
 
-async fn run() {
-    self::api::run().await;
+async fn run() -> Result<(), anyhow::Error> {
+    self::api::run().await?;
     println!("Starting Jodel GCM verification server");
     let args = std::env::args().collect::<Vec<String>>();
     if args.len() == 1 {
@@ -40,4 +40,5 @@ async fn run() {
         println!("Wrong command line args");
         std::process::exit(1);
     };
+    Ok(())
 }

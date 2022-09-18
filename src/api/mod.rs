@@ -1,13 +1,26 @@
+use crate::errors::Error;
 use crate::lib::*;
+use axum::extract::State;
+use axum::response::IntoResponse;
+use axum::routing::{get, post};
+use axum::{Json, Router, Server};
+use http::header::CONTENT_TYPE;
+use http::{Method, StatusCode};
 use hyper::client::connect::HttpConnector;
 use hyper::Client;
 use hyper_tls::HttpsConnector;
 use serde::Serialize;
-use warp::Filter;
+use serde_json::json;
+use tower_http::cors::{Any, CorsLayer};
 
-pub fn build<E: Into<Box<dyn std::error::Error>>>(err: E) -> warp::Rejection {
-    println!("Error {:?}", err.into());
-    warp::reject::reject()
+impl IntoResponse for Error {
+    fn into_response(self) -> axum::response::Response {
+        println!("Error {:?}", self);
+        let body = Json(json!({
+            "error": self.to_string(),
+        }));
+        (StatusCode::INTERNAL_SERVER_ERROR, body).into_response()
+    }
 }
 
 #[derive(Serialize)]
@@ -16,54 +29,44 @@ struct VerificationApiResponse {
 }
 
 async fn create_account(
-    client: Client<HttpsConnector<HttpConnector>>,
-) -> Result<impl warp::Reply, warp::Rejection> {
-    let response = request(&client).await.map_err(build)?;
-    Ok(warp::reply::json(&response))
+    State(client): State<Client<HttpsConnector<HttpConnector>>>,
+) -> Result<impl IntoResponse, Error> {
+    let response = request(&client).await?;
+    Ok(Json(response))
 }
 
-async fn get_verification(body: AndroidAccountSerDe) -> Result<impl warp::Reply, warp::Rejection> {
+async fn get_verification(
+    Json(body): Json<AndroidAccountSerDe>,
+) -> Result<impl IntoResponse, Error> {
     let account = AndroidAccount {
-        android_id: body.android_id.parse().map_err(build)?,
-        security_token: body.security_token.parse().map_err(build)?,
+        android_id: body
+            .android_id
+            .parse()
+            .map_err(|_e| Error::Msg("Invalid android_id number"))?,
+        security_token: body
+            .security_token
+            .parse()
+            .map_err(|_e| Error::Msg("Invalid security_token number"))?,
     };
-    let code = read(&account).await.map_err(build)?;
-    Ok(warp::reply::json(&VerificationApiResponse {
-        verification: code,
-    }))
+    let code = read(&account).await?;
+    Ok(Json(VerificationApiResponse { verification: code }))
 }
 
-pub async fn run() {
+pub async fn run() -> Result<(), anyhow::Error> {
     let addr: std::net::SocketAddr = "127.0.0.1:8080".parse().expect("Invalid address");
     println!("Listening on http://{}", addr);
 
-    let cors = warp::cors()
-        .allow_any_origin()
-        .allow_header("content-type")
-        .allow_method("POST")
-        .allow_method("GET")
-        .build();
-
-    let logging = warp::log("gcm_verification");
+    let cors = CorsLayer::new()
+        .allow_origin(Any)
+        .allow_methods([Method::GET, Method::POST])
+        .allow_headers([CONTENT_TYPE]);
 
     let client = Client::builder().build(HttpsConnector::new());
 
-    let account_route = warp::path!("account")
-        .and(warp::get())
-        .and(warp::any().map(move || client.clone()))
-        .and_then(create_account);
+    let app = Router::with_state(client)
+        .route("/account", get(create_account))
+        .route("/verification", post(get_verification))
+        .layer(cors);
 
-    let verification_route = warp::path!("verification")
-        .and(warp::post())
-        .and(warp::body::json())
-        .and_then(get_verification);
-
-    let server = warp::serve(
-        account_route
-            .or(verification_route)
-            .with(cors)
-            .with(logging),
-    );
-
-    server.run(addr).await;
+    Ok(Server::bind(&addr).serve(app.into_make_service()).await?)
 }
