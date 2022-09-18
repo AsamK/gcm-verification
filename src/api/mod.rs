@@ -90,7 +90,7 @@ async fn get_firebase_token(
 }
 
 pub async fn run() -> Result<(), anyhow::Error> {
-    let addr: std::net::SocketAddr = "127.0.0.1:8080".parse().expect("Invalid address");
+    let addr: std::net::SocketAddr = "127.0.0.1:9090".parse().expect("Invalid address");
     println!("Listening on http://{}", addr);
 
     let cors = CorsLayer::new()

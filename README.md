@@ -4,15 +4,15 @@ This application provides two HTTP endpoints to create an Android account and to
 The server is written in Rust with async/await, tokio and axum.
 
 Endpoints:
-- GET http://127.0.0.1:8080/account <br>
+- GET http://127.0.0.1:9090/account <br>
   response: `{"android_account":{"android_id":"XXX","security_token":"XXX"},"gcm_token":"XXX"}`
-- POST http://127.0.0.1:8080/verification <br>
+- POST http://127.0.0.1:9090/verification <br>
   body: `{"android_id":"XXX","security_token":"XXX"}` <br>
   response: `{"verification":{"server_time":0,"type":"silent_verification","verification_code":"XXX"}}`
 
-- POST http://127.0.0.1:8080/email/request <br>
+- POST http://127.0.0.1:9090/email/request <br>
   body: `{"email":"XXX@XXX"}`
-- POST http://127.0.0.1:8080/email/confirm <br>
+- POST http://127.0.0.1:9090/email/confirm <br>
   body: `{"email":"XXX@XXX","link":"XXX"}` <br>
   response: `{"access_token":"XXX","user_id":"XXX"}`
 
