@@ -111,12 +111,12 @@ pub struct RequestResponse {
 pub async fn request(
     client: &Client<HttpsConnector<HttpConnector>>,
 ) -> Result<RequestResponse, Error> {
-    let android_account = create_gcm_account_future(&client).await?;
+    let android_account = create_gcm_account_future(client).await?;
 
     let token;
     loop {
         if let Ok(t) = get_push_token(
-            &client,
+            client,
             android_account.android_id,
             android_account.security_token,
         )
@@ -125,7 +125,7 @@ pub async fn request(
             token = t;
             break;
         }
-        tokio::time::delay_for(std::time::Duration::from_millis(5)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(5)).await;
     }
 
     Ok(RequestResponse {
@@ -317,7 +317,7 @@ pub async fn read(account: &AndroidAccount) -> Result<VerificationResponse, Erro
 
     let socket = TcpStream::connect(&server[0]).await?;
     let cx = TlsConnector::builder().build().unwrap();
-    let cx = tokio_tls::TlsConnector::from(cx);
+    let cx = tokio_native_tls::TlsConnector::from(cx);
 
     let login_request = get_login_request(account);
 
@@ -364,8 +364,8 @@ pub async fn read(account: &AndroidAccount) -> Result<VerificationResponse, Erro
         let len = std::cmp::min(length, 10 - consumed_count);
         buf[0..len].copy_from_slice(&length_buf[consumed_count..len + consumed_count]);
         if len < length {
-            let mut remaining = &mut buf[10 - consumed_count..];
-            stream.read_exact(&mut remaining).await?;
+            let remaining = &mut buf[10 - consumed_count..];
+            stream.read_exact(remaining).await?;
         } else {
             panic!("The case that message length smaller 10 is no handled yet!");
         }

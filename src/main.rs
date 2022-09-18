@@ -11,8 +11,7 @@ mod protos;
 fn main() {
     env_logger::init();
 
-    tokio::runtime::Builder::new()
-        .threaded_scheduler()
+    tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .unwrap()
