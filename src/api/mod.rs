@@ -9,7 +9,7 @@ use http::header::CONTENT_TYPE;
 use http::{Method, StatusCode};
 use hyper::client::connect::HttpConnector;
 use hyper::Client;
-use hyper_tls::HttpsConnector;
+use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tower_http::cors::{Any, CorsLayer};
@@ -98,7 +98,12 @@ pub async fn run() -> Result<(), anyhow::Error> {
         .allow_methods([Method::GET, Method::POST])
         .allow_headers([CONTENT_TYPE]);
 
-    let client = Client::builder().build(HttpsConnector::new());
+    let connector = HttpsConnectorBuilder::new()
+        .with_tls_config(tls::get_client_config())
+        .https_only()
+        .enable_http1()
+        .build();
+    let client: Client<_, hyper::Body> = Client::builder().build(connector);
 
     let app = Router::with_state(client)
         .route("/account", get(create_account))

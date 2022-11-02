@@ -5,20 +5,21 @@ authors = ["Sebastian <asamk@gmx.de>"]
 edition = "2021"
 
 [dependencies]
+anyhow = "1.0.65"
+axum = "0.6.0-rc.2"
 bytes = "1"
 env_logger = "0.9"
 futures = "0.3"
 http = "0.2"
 hyper = "0.14"
-hyper-tls = "0.5"
-native-tls = "0.2"
-tokio-native-tls = "0.3"
+hyper-rustls = "0.23.0"
 quick-protobuf = "0.8"
 rand = "0.8"
+rustls = "0.20.7"
+rustls-native-certs = "0.6.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 serde_urlencoded = "0.7"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "io-util"] }
-axum = "0.6.0-rc.2"
+tokio-rustls = "0.23.4"
 tower-http = { version = "0.3", features = ["cors"] }
-anyhow = "1.0.65"

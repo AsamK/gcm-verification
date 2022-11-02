@@ -3,7 +3,7 @@ use http::Uri;
 use hyper::client::HttpConnector;
 use hyper::header::{HeaderValue, CONTENT_TYPE};
 use hyper::Client;
-use hyper_tls::HttpsConnector;
+use hyper_rustls::HttpsConnector;
 use serde::Deserialize;
 use serde_json::json;
 

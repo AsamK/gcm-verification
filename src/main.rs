@@ -1,5 +1,5 @@
 use hyper::Client;
-use hyper_tls::HttpsConnector;
+use hyper_rustls::HttpsConnectorBuilder;
 
 use self::lib::*;
 
@@ -23,7 +23,12 @@ async fn run() -> Result<(), anyhow::Error> {
     println!("Starting Jodel GCM verification server");
     let args = std::env::args().collect::<Vec<String>>();
     if args.len() == 1 {
-        let client = Client::builder().build(HttpsConnector::new());
+        let connector = HttpsConnectorBuilder::new()
+            .with_tls_config(tls::get_client_config())
+            .https_only()
+            .enable_http1()
+            .build();
+        let client: Client<_, hyper::Body> = Client::builder().build(connector);
 
         let response = request(&client).await.unwrap();
         let response = serde_json::to_string(&response).unwrap();

@@ -5,8 +5,7 @@ use hyper::client::HttpConnector;
 use hyper::header::{HeaderValue, AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, USER_AGENT};
 use hyper::Client;
 use hyper::{Body, Request};
-use hyper_tls::HttpsConnector;
-use native_tls::TlsConnector;
+use hyper_rustls::HttpsConnector;
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use rand::distributions::Alphanumeric;
 use rand::Rng;
@@ -14,12 +13,14 @@ use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::default::Default;
 use std::net::ToSocketAddrs;
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
 use crate::errors::Error;
 
 pub mod mailauth;
+pub mod tls;
 
 #[derive(Deserialize, Debug)]
 pub struct AndroidAccount {
@@ -305,15 +306,16 @@ pub async fn read(account: &AndroidAccount) -> Result<VerificationResponse, Erro
     let server: Vec<_> = mtalk_uri.to_socket_addrs().expect("wrong uri").collect();
 
     let socket = TcpStream::connect(&server[0]).await?;
-    let cx = TlsConnector::builder().build().unwrap();
-    let cx = tokio_native_tls::TlsConnector::from(cx);
+
+    let config = Arc::new(tls::get_client_config());
+    let cx = tokio_rustls::TlsConnector::from(config);
 
     let login_request = get_login_request(account);
 
     let length = login_request.get_size() as u64;
 
     let mut stream = cx
-        .connect(mtalk_host, socket)
+        .connect(mtalk_host.try_into().expect("invalid name"), socket)
         .await
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
 
