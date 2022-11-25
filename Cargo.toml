@@ -6,9 +6,9 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.65"
-axum = "0.6.0-rc.2"
+axum = "0.6"
 bytes = "1"
-env_logger = "0.9"
+env_logger = "0.10"
 futures = "0.3"
 http = "0.2"
 hyper = "0.14"

@@ -105,11 +105,12 @@ pub async fn run() -> Result<(), anyhow::Error> {
         .build();
     let client: Client<_, hyper::Body> = Client::builder().build(connector);
 
-    let app = Router::with_state(client)
+    let app = Router::new()
         .route("/account", get(create_account))
         .route("/verification", post(get_verification))
         .route("/email/request", post(get_request_email_verification))
         .route("/email/confirm", post(get_firebase_token))
+        .with_state(client)
         .layer(cors);
 
     Ok(Server::bind(&addr).serve(app.into_make_service()).await?)
