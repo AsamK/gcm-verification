@@ -1,5 +1,9 @@
 use std::fmt::Display;
 
+use axum::{response::IntoResponse, Json};
+use http::StatusCode;
+use serde_json::json;
+
 #[derive(Debug)]
 pub enum Error {
     Msg(&'static str),
@@ -92,5 +96,15 @@ impl From<std::io::Error> for Error {
 impl From<http::uri::InvalidUri> for Error {
     fn from(err: http::uri::InvalidUri) -> Error {
         Error::InvalidUri(err)
+    }
+}
+
+impl IntoResponse for Error {
+    fn into_response(self) -> axum::response::Response {
+        println!("Error {:?}", self);
+        let body = Json(json!({
+            "error": self.to_string(),
+        }));
+        (StatusCode::INTERNAL_SERVER_ERROR, body).into_response()
     }
 }

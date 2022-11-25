@@ -1,11 +1,11 @@
-use crate::protos::checkin;
-use crate::protos::mcs;
 use bytes::buf::BufMut;
 use hyper::client::HttpConnector;
 use hyper::header::{HeaderValue, AUTHORIZATION, CONTENT_LENGTH, CONTENT_TYPE, USER_AGENT};
 use hyper::Client;
 use hyper::{Body, Request};
 use hyper_rustls::HttpsConnector;
+use protos::checkin;
+use protos::mcs;
 use quick_protobuf::{BytesReader, MessageRead, MessageWrite, Writer};
 use rand::distributions::Alphanumeric;
 use rand::Rng;
@@ -17,9 +17,11 @@ use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
-use crate::errors::Error;
+use errors::Error;
 
+pub mod errors;
 pub mod mailauth;
+mod protos;
 pub mod tls;
 
 #[derive(Deserialize, Debug)]

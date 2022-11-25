@@ -1,12 +1,9 @@
 use hyper::Client;
 use hyper_rustls::HttpsConnectorBuilder;
 
-use self::lib::*;
+use gcm_verification::*;
 
 mod api;
-mod errors;
-mod lib;
-mod protos;
 
 fn main() -> Result<(), anyhow::Error> {
     env_logger::init();

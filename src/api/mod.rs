@@ -1,28 +1,17 @@
-use crate::errors::Error;
-use crate::lib::mailauth::{generate_firebase_token, request_email_verification};
-use crate::lib::*;
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::routing::{get, post};
 use axum::{Json, Router, Server};
+use gcm_verification::errors::Error;
+use gcm_verification::mailauth::{generate_firebase_token, request_email_verification};
+use gcm_verification::*;
 use http::header::CONTENT_TYPE;
-use http::{Method, StatusCode};
+use http::Method;
 use hyper::client::connect::HttpConnector;
 use hyper::Client;
 use hyper_rustls::{HttpsConnector, HttpsConnectorBuilder};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 use tower_http::cors::{Any, CorsLayer};
-
-impl IntoResponse for Error {
-    fn into_response(self) -> axum::response::Response {
-        println!("Error {:?}", self);
-        let body = Json(json!({
-            "error": self.to_string(),
-        }));
-        (StatusCode::INTERNAL_SERVER_ERROR, body).into_response()
-    }
-}
 
 #[derive(Serialize)]
 struct VerificationApiResponse {
